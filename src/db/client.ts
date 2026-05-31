@@ -1,5 +1,6 @@
 import { drizzle, type NeonHttpDatabase } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
+import type { BatchItem } from "drizzle-orm/batch";
 import * as schema from "./schema";
 
 // Lazy singleton: we don't touch DATABASE_URL until the db is actually used, so
@@ -23,10 +24,28 @@ function init(): NeonHttpDatabase<typeof schema> {
 // A proxy so existing `import { db }` call sites keep working unchanged while
 // initialization stays deferred to first use.
 export const db = new Proxy({} as NeonHttpDatabase<typeof schema>, {
-  get(_target, prop, receiver) {
+  get(_target, prop) {
     const real = init();
-    return Reflect.get(real, prop, receiver);
+    const value = Reflect.get(real, prop, real);
+    // Bind methods to the real instance so `this` is correct (e.g. db.batch()).
+    return typeof value === "function" ? value.bind(real) : value;
   },
 });
+
+/**
+ * Run several writes atomically. The neon-http driver has no interactive
+ * transactions, but `db.batch([...])` executes the statements in a single
+ * Postgres transaction (all-or-nothing). Pass client-generated UUIDs when a
+ * later statement needs an id from an earlier one, since we can't read results
+ * mid-batch.
+ */
+export async function atomic(ops: BatchItem<"pg">[]): Promise<void> {
+  if (ops.length === 0) return;
+  if (ops.length === 1) {
+    await ops[0];
+    return;
+  }
+  await db.batch(ops as [BatchItem<"pg">, ...BatchItem<"pg">[]]);
+}
 
 export { schema };

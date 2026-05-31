@@ -1,5 +1,7 @@
+import { randomUUID } from "crypto";
+import type { BatchItem } from "drizzle-orm/batch";
 import { ok, fail, handle } from "@/lib/api";
-import { db } from "@/db/client";
+import { db, atomic } from "@/db/client";
 import { friends, specialDays } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { normalizeToE164, hashPhone } from "@/lib/phone";
@@ -41,30 +43,34 @@ export async function POST(req: Request) {
       const linkable = await findLinkableUser(phoneE164, user.id);
       if (linkable) linked++;
 
-      const [friend] = await db
-        .insert(friends)
-        .values({
+      const friendId = randomUUID();
+      const ops: BatchItem<"pg">[] = [
+        db.insert(friends).values({
+          id: friendId,
           ownerUserId: user.id,
           name: c.name,
           phoneE164,
           phoneHash,
           timezone: defaultTz,
           linkedUserId: linkable?.id ?? null,
-        })
-        .returning();
-      created++;
-
+        }),
+      ];
       if (c.birthday) {
-        await db.insert(specialDays).values({
-          friendId: friend.id,
-          type: "birthday",
-          month: c.birthday.month,
-          day: c.birthday.day,
-          year: c.birthday.year ?? null,
-          recurring: true,
-        });
+        ops.push(
+          db.insert(specialDays).values({
+            friendId,
+            type: "birthday",
+            month: c.birthday.month,
+            day: c.birthday.day,
+            year: c.birthday.year ?? null,
+            recurring: true,
+          })
+        );
         withBirthday++;
       }
+      // Each contact's friend + birthday land together (or not at all).
+      await atomic(ops);
+      created++;
     }
 
     return ok({ created, linked, withBirthday, total: contacts.length });

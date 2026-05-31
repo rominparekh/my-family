@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { users, contentDrafts } from "@/db/schema";
 import { sendText } from "@/lib/whatsapp/client";
-import { applyDecision, looksLikeApproval, latestActionableDraft } from "@/lib/approvals";
+import { applyDecision, looksLikeApproval, resolveDraftForReply } from "@/lib/approvals";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +98,7 @@ async function handleMessage(msg: WhatsAppMessage) {
   // 2. Plain text: either an approval word or free-text feedback.
   if (msg.type === "text" && msg.text?.body) {
     const body = msg.text.body.trim();
-    const draft = await latestActionableDraft(user.id);
+    const draft = await resolveDraftForReply(user.id, msg.context?.id);
     if (!draft) {
       await sendText(fromE164, "Nothing's waiting for your approval right now 🙂");
       return;
@@ -132,6 +132,8 @@ interface WhatsAppMessage {
   from: string;
   type: string;
   text?: { body: string };
+  // Present when the user used WhatsApp's "reply" to quote our message.
+  context?: { id?: string };
   interactive?: {
     button_reply?: { id: string; title: string };
   };

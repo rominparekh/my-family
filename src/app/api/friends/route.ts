@@ -1,6 +1,8 @@
+import { randomUUID } from "crypto";
 import { desc, eq } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { ok, fail, handle } from "@/lib/api";
-import { db } from "@/db/client";
+import { db, atomic } from "@/db/client";
 import { friends, relationships, specialDays } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { normalizeToE164, hashPhone } from "@/lib/phone";
@@ -39,44 +41,51 @@ export async function POST(req: Request) {
 
     const linkable = await findLinkableUser(phoneE164, user.id);
 
-    const [friend] = await db
-      .insert(friends)
-      .values({
-        ownerUserId: user.id,
-        name: input.name,
-        phoneE164,
-        phoneHash,
-        timezone: input.timezone,
-        notes: input.notes ?? null,
-        linkedUserId: linkable?.id ?? null,
-      })
-      .returning();
+    // Client-generated id so the relationship/special-day inserts can reference
+    // it within one atomic batch (no mid-transaction read).
+    const friendId = randomUUID();
+    const friendValues = {
+      id: friendId,
+      ownerUserId: user.id,
+      name: input.name,
+      phoneE164,
+      phoneHash,
+      timezone: input.timezone,
+      notes: input.notes ?? null,
+      linkedUserId: linkable?.id ?? null,
+    };
 
+    const ops: BatchItem<"pg">[] = [db.insert(friends).values(friendValues)];
     if (input.relationType) {
-      await db.insert(relationships).values({
-        ownerUserId: user.id,
-        friendId: friend.id,
-        relationType: input.relationType,
-      });
+      ops.push(
+        db.insert(relationships).values({
+          ownerUserId: user.id,
+          friendId,
+          relationType: input.relationType,
+        })
+      );
     }
-
     if (input.specialDays?.length) {
-      await db.insert(specialDays).values(
-        input.specialDays.map((d) => ({
-          friendId: friend.id,
-          type: d.type,
-          label: d.label ?? null,
-          month: d.month,
-          day: d.day,
-          year: d.year ?? null,
-          recurring: d.recurring,
-        }))
+      ops.push(
+        db.insert(specialDays).values(
+          input.specialDays.map((d) => ({
+            friendId,
+            type: d.type,
+            label: d.label ?? null,
+            month: d.month,
+            day: d.day,
+            year: d.year ?? null,
+            recurring: d.recurring,
+          }))
+        )
       );
     }
 
+    await atomic(ops);
+
     return ok(
       {
-        friend,
+        friend: friendValues,
         linkedTo: linkable
           ? { userId: linkable.id, displayName: linkable.displayName }
           : null,

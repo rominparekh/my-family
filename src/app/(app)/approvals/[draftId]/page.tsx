@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/db/client";
 import { contentDrafts, draftMessages } from "@/db/schema";
 import { prettyDate } from "@/lib/timezone";
+import { draftCostUsd } from "@/lib/ai/usage";
 import ApprovalPanel from "@/components/approvals/ApprovalPanel";
 
 export const dynamic = "force-dynamic";
@@ -32,15 +33,19 @@ export default async function ApprovalDetailPage({
     ? prettyDate(draft.occasionDate, draft.friend.timezone)
     : draft.occasionDate;
 
+  const costUsd = await draftCostUsd(draft.id);
+
   return (
     <ApprovalPanel
       draft={{
         id: draft.id,
         status: draft.status,
+        kind: draft.kind,
         textBody: draft.textBody,
         mediaUrls: draft.mediaUrls,
         friendName: draft.friend?.name ?? "Friend",
         occasionWhen,
+        costUsd,
       }}
       messages={messages.map((m) => ({
         id: m.id,

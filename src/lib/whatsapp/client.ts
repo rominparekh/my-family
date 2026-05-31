@@ -125,3 +125,13 @@ export async function sendImage(toE164: string, imageUrl: string, caption?: stri
     image: { link: imageUrl, ...(caption ? { caption: caption.slice(0, 1024) } : {}) },
   });
 }
+
+/** Send a video (the Phase-2 video wish). Meta fetches the link at send time, so
+ *  it must be a stable, public HTTPS URL (we persist generated media to Blob). */
+export async function sendVideo(toE164: string, videoUrl: string, caption?: string) {
+  return postMessage({
+    to: toWaRecipient(toE164),
+    type: "video",
+    video: { link: videoUrl, ...(caption ? { caption: caption.slice(0, 1024) } : {}) },
+  });
+}

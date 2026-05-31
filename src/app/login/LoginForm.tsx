@@ -11,8 +11,9 @@ export default function LoginForm() {
   const params = useSearchParams();
   const next = params.get("next") || "/dashboard";
 
+  const invited = params.get("invited") === "1";
   const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(params.get("phone") ?? "");
   const [code, setCode] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [timezone] = useState(() =>
@@ -66,6 +67,11 @@ export default function LoginForm() {
 
   return (
     <Card>
+      {invited && step === "phone" && (
+        <p className="mb-4 rounded-lg bg-brand-50 p-2 text-sm text-brand-700">
+          🎉 You&apos;ve been invited! Sign in to join and start celebrating together.
+        </p>
+      )}
       {step === "phone" ? (
         <form onSubmit={requestCode} className="space-y-4">
           <div>

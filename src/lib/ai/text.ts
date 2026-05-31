@@ -43,12 +43,30 @@ function buildPrompt(ctx: WishContext): string {
   return lines.join("\n");
 }
 
-/** Generate a wish message, guaranteed to respect the character limit. */
-export async function generateWishText(ctx: WishContext): Promise<string> {
+export interface WishTextResult {
+  text: string;
+  model: string;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  };
+}
+
+/** Generate a wish message, guaranteed to respect the character limit. Returns
+ *  token usage so the caller can attribute cost. */
+export async function generateWishText(ctx: WishContext): Promise<WishTextResult> {
+  const zeroUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+
   // Fallback when no API key — keeps the whole flow runnable in dev.
   if (!process.env.ANTHROPIC_API_KEY) {
     const base = `Happy ${ctx.occasion}, ${ctx.friendName}! Wishing you a wonderful day. — ${ctx.senderName}`;
-    return base.slice(0, CONTENT_LIMITS.TEXT_MAX_CHARS);
+    return {
+      text: base.slice(0, CONTENT_LIMITS.TEXT_MAX_CHARS),
+      model: "fallback",
+      usage: zeroUsage,
+    };
   }
 
   const msg = await client().messages.create({
@@ -64,7 +82,23 @@ export async function generateWishText(ctx: WishContext): Promise<string> {
     .trim()
     .replace(/^["']|["']$/g, "");
 
-  return enforceLimit(text, ctx);
+  // Cache token fields exist at runtime; read them defensively across SDK versions.
+  const u = msg.usage as {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number | null;
+    cache_creation_input_tokens?: number | null;
+  };
+  return {
+    text: enforceLimit(text, ctx),
+    model: MODEL,
+    usage: {
+      inputTokens: u.input_tokens ?? 0,
+      outputTokens: u.output_tokens ?? 0,
+      cacheReadTokens: u.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
+    },
+  };
 }
 
 function enforceLimit(text: string, ctx: WishContext): string {

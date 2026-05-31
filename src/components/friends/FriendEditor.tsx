@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge, Button, Card, Input, Label, Select, Textarea } from "@/components/ui";
-import { RELATION_TYPES, SPECIAL_DAY_TYPES } from "@/lib/constants";
+import { RELATION_TYPES, SPECIAL_DAY_TYPES, CONTENT_KINDS } from "@/lib/constants";
 
 interface SpecialDay {
   id: string;
@@ -30,11 +30,18 @@ interface Friend {
   phoneE164: string | null;
   timezone: string;
   notes: string | null;
+  preferredContentKind: string;
   linkedUserId: string | null;
   relationships: Relationship[];
   specialDays: SpecialDay[];
   photos: Photo[];
 }
+
+const KIND_LABEL: Record<string, string> = {
+  text: "Message",
+  photo: "Photo",
+  video: "Video",
+};
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -80,6 +87,7 @@ export default function FriendEditor({ friend }: { friend: Friend }) {
       <RelationshipsCard friend={friend} call={call} busy={busy} />
       <SpecialDaysCard friend={friend} call={call} busy={busy} />
       <PhotosCard friend={friend} router={router} />
+      {!friend.linkedUserId && <InviteCard friend={friend} />}
 
       <Card className="border-red-200">
         <div className="flex items-center justify-between">
@@ -116,6 +124,7 @@ function DetailsCard({
   const [phone, setPhone] = useState(friend.phoneE164 ?? "");
   const [timezone, setTimezone] = useState(friend.timezone);
   const [notes, setNotes] = useState(friend.notes ?? "");
+  const [kind, setKind] = useState(friend.preferredContentKind);
 
   return (
     <Card className="space-y-3">
@@ -133,6 +142,16 @@ function DetailsCard({
           <Label>Timezone (IANA)</Label>
           <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Los_Angeles" />
         </div>
+        <div>
+          <Label>Wish type for their special days</Label>
+          <Select value={kind} onChange={(e) => setKind(e.target.value)}>
+            {CONTENT_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {KIND_LABEL[k] ?? k}
+              </option>
+            ))}
+          </Select>
+        </div>
       </div>
       <div>
         <Label>Notes (used to personalise wishes)</Label>
@@ -149,7 +168,13 @@ function DetailsCard({
           call(`/api/friends/${friend.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, phone: phone || null, timezone, notes: notes || null }),
+            body: JSON.stringify({
+              name,
+              phone: phone || null,
+              timezone,
+              notes: notes || null,
+              preferredContentKind: kind,
+            }),
           })
         }
       >
@@ -300,6 +325,46 @@ function SpecialDaysCard({
       >
         Add special day
       </Button>
+    </Card>
+  );
+}
+
+function InviteCard({ friend }: { friend: Friend }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function invite() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/friends/${friend.id}/invite`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) throw new Error(json.error || "Could not invite");
+      setMsg("Invite sent! They'll be auto-linked when they join.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-3">
+      <h2 className="font-semibold">Invite to Parekh Family</h2>
+      {friend.phoneE164 ? (
+        <>
+          <p className="text-sm text-neutral-600">
+            Send {friend.name} a join link. When they sign up with this number, they&apos;ll
+            be linked automatically.
+          </p>
+          <Button variant="ghost" onClick={invite} disabled={busy}>
+            {busy ? "Sending…" : "Send invite"}
+          </Button>
+        </>
+      ) : (
+        <p className="text-sm text-neutral-400">Add a phone number above to invite them.</p>
+      )}
+      {msg && <p className="text-sm text-neutral-600">{msg}</p>}
     </Card>
   );
 }

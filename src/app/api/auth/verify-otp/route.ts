@@ -1,8 +1,9 @@
+import { randomUUID } from "crypto";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { ok, fail, handle } from "@/lib/api";
-import { db } from "@/db/client";
-import { users, friends } from "@/db/schema";
+import { db, atomic } from "@/db/client";
+import { users, friends, invites } from "@/db/schema";
 import { normalizeToE164, hashPhone } from "@/lib/phone";
 import { verifyOtp } from "@/lib/auth/otp";
 import { createSession } from "@/lib/auth/session";
@@ -42,24 +43,28 @@ export async function POST(req: Request) {
 
     let user = existing[0];
     if (!user) {
-      const inserted = await db
-        .insert(users)
-        .values({
+      const userId = randomUUID();
+      const phoneHash = hashPhone(e164);
+      // Create the user, auto-link any pre-existing friend records that point at
+      // this number, and mark any pending invites accepted — atomically, so we
+      // never end up half-linked on partial failure.
+      await atomic([
+        db.insert(users).values({
+          id: userId,
           phoneE164: e164,
-          phoneHash: hashPhone(e164),
+          phoneHash,
           displayName: displayName ?? null,
           timezone: timezone ?? "UTC",
           waVerified: true,
-        })
-        .returning();
+        }),
+        db.update(friends).set({ linkedUserId: userId }).where(eq(friends.phoneHash, phoneHash)),
+        db
+          .update(invites)
+          .set({ status: "accepted", acceptedUserId: userId, acceptedAt: new Date() })
+          .where(and(eq(invites.phoneHash, phoneHash), eq(invites.status, "pending"))),
+      ]);
+      const inserted = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       user = inserted[0];
-
-      // Auto-link: any friend records others created with this number can now
-      // point at the real account (enables discovery / future invites).
-      await db
-        .update(friends)
-        .set({ linkedUserId: user.id })
-        .where(eq(friends.phoneHash, user.phoneHash));
     } else {
       const updates: Partial<typeof users.$inferInsert> = { waVerified: true };
       if (displayName && !user.displayName) updates.displayName = displayName;

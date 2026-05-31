@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
 import { ok, fail } from "@/lib/api";
 import { db } from "@/db/client";
-import { specialDays, friends, contentDrafts } from "@/db/schema";
+import { specialDays, friends } from "@/db/schema";
 import { nextOccurrence } from "@/lib/timezone";
 import { inngest } from "@/inngest/client";
+import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,9 +16,12 @@ function leadDays(): number {
 
 /**
  * Runs hourly (vercel.json cron). Finds special days whose next occurrence is
- * within the lead window and, for each, idempotently creates a draft and kicks
- * off the generate→approve→deliver workflow. The unique (specialDayId,
- * occasionDate) index makes re-runs safe.
+ * within the lead window and emits one `occasion/upcoming` event per occasion.
+ *
+ * Crucially, the cron does NOT write the draft. It only emits an event with a
+ * deterministic dedup id; the Inngest function creates and atomically claims the
+ * draft. That removes the previous "insert succeeds, send fails → orphaned draft"
+ * failure mode entirely — re-emitting the same event is always safe.
  */
 export async function GET(req: Request) {
   // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
@@ -37,41 +41,49 @@ export async function GET(req: Request) {
       friendId: friends.id,
       ownerUserId: friends.ownerUserId,
       timezone: friends.timezone,
+      preferredKind: friends.preferredContentKind,
     })
     .from(specialDays)
     .innerJoin(friends, eq(specialDays.friendId, friends.id));
 
   let scanned = 0;
-  let queued = 0;
+  const events: {
+    name: "occasion/upcoming";
+    id: string;
+    data: {
+      specialDayId: string;
+      occasionDate: string;
+      ownerUserId: string;
+      friendId: string;
+      scheduledFor: string;
+      kind: "text" | "photo" | "video";
+    };
+  }[] = [];
 
   for (const row of rows) {
     scanned++;
     const occ = nextOccurrence(row.month, row.day, row.timezone);
     if (occ.daysUntil > lead) continue;
 
-    // Idempotent insert: skip if a draft already exists for this occasion.
-    const inserted = await db
-      .insert(contentDrafts)
-      .values({
-        ownerUserId: row.ownerUserId,
-        friendId: row.friendId,
+    events.push({
+      name: "occasion/upcoming",
+      // Dedup id: collapses duplicate hourly emits for the same occasion at the
+      // event layer. The function's claim is the ultimate guard.
+      id: `occasion:${row.dayId}:${occ.occasionDate}`,
+      data: {
         specialDayId: row.dayId,
         occasionDate: occ.occasionDate,
-        kind: "text",
-        status: "draft",
-        scheduledFor: occ.deliveryAt,
-      })
-      .onConflictDoNothing({
-        target: [contentDrafts.specialDayId, contentDrafts.occasionDate],
-      })
-      .returning({ id: contentDrafts.id });
-
-    const draft = inserted[0];
-    if (!draft) continue; // already existed
-
-    await inngest.send({ name: "occasion/upcoming", data: { draftId: draft.id } });
-    queued++;
+        ownerUserId: row.ownerUserId,
+        friendId: row.friendId,
+        scheduledFor: occ.deliveryAt.toISOString(),
+        kind: row.preferredKind,
+      },
+    });
   }
 
-  return ok({ scanned, queued, leadDays: lead });
+  // Batched send (one network round-trip) instead of N awaited sends.
+  if (events.length > 0) await inngest.send(events);
+
+  log.info("cron.scan", { scanned, queued: events.length, leadDays: lead });
+  return ok({ scanned, queued: events.length, leadDays: lead });
 }

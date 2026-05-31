@@ -9,10 +9,12 @@ import { Badge, Button, Card, Textarea } from "@/components/ui";
 interface Draft {
   id: string;
   status: string;
+  kind: string;
   textBody: string | null;
   mediaUrls: string[];
   friendName: string;
   occasionWhen: string;
+  costUsd: number;
 }
 interface Message {
   id: string;
@@ -79,18 +81,33 @@ export default function ApprovalPanel({
         <div className="rounded-xl bg-neutral-50 p-4 text-lg leading-relaxed">
           {draft.textBody || "Generating…"}
         </div>
-        {draft.mediaUrls.length > 0 && (
-          <div className="grid grid-cols-3 gap-2">
-            {draft.mediaUrls.slice(0, 3).map((url) => (
-              <div key={url} className="relative aspect-square overflow-hidden rounded-lg bg-neutral-100">
-                <Image src={url} alt="" fill className="object-cover" />
-              </div>
-            ))}
-          </div>
+        {draft.kind === "video" && draft.mediaUrls[0] ? (
+          <video
+            src={draft.mediaUrls[0]}
+            controls
+            className="w-full rounded-lg bg-black"
+          />
+        ) : (
+          draft.mediaUrls.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {draft.mediaUrls.slice(0, 3).map((url) => (
+                <div key={url} className="relative aspect-square overflow-hidden rounded-lg bg-neutral-100">
+                  <Image src={url} alt="" fill className="object-cover" />
+                </div>
+              ))}
+            </div>
+          )
         )}
-        {draft.textBody && (
-          <p className="text-xs text-neutral-400">{draft.textBody.length}/300 characters</p>
-        )}
+        <div className="flex items-center justify-between">
+          {draft.textBody && (
+            <p className="text-xs text-neutral-400">{draft.textBody.length}/300 characters</p>
+          )}
+          {draft.costUsd > 0 && (
+            <p className="text-xs text-neutral-400">
+              Generation cost: ${draft.costUsd.toFixed(draft.costUsd < 0.01 ? 4 : 2)}
+            </p>
+          )}
+        </div>
       </Card>
 
       {!locked && (

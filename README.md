@@ -120,6 +120,50 @@ curl http://localhost:3000/api/cron/scan
    and register the app at `/api/inngest`.
 6. Point your purchased domain at the Vercel project.
 
+## Phase 2 (current)
+
+Built on top of the MVP, after a distributed-systems architecture review:
+
+**Reliability hardening**
+- **Idempotent orchestration.** The draft is now created *and atomically claimed*
+  inside the Inngest function (compare-and-swap on `claimedAt`), not in the cron.
+  A failed event send can no longer orphan a draft, and duplicate hourly emits are
+  collapsed by an event dedup id + the claim. Each WhatsApp send is its own
+  memoized `step.run`, so at-least-once retries never double-send; delivery also
+  re-checks `status`.
+- **Atomic multi-writes.** User-create+auto-link, friend-create (+relationship,
+  +days), import, and approval decisions run via `db.batch()` (single Postgres
+  transaction) using client-generated UUIDs.
+- **Precise approval routing.** Free-text WhatsApp replies route via the reply's
+  quoted message id → the approval notification → exact draft, falling back to a
+  per-user `activeApprovalDraftId` pointer (no more "most-recently-updated" guess).
+- **OTP rate limiting.** Per-phone + per-IP throttling with an append-only
+  `otp_requests` log (can't be reset by re-requesting).
+- **Stable media.** Generated images/videos are re-hosted to Vercel Blob before
+  delivery, so Meta can always fetch them.
+- **Self-healing.** `/api/cron/reconcile` (every 6h) requeues drafts stuck in
+  generation and fails-loud on drafts that missed their delivery window.
+- **Observability.** Structured JSON logging (`src/lib/log.ts`) with draft/run
+  correlation and secret redaction.
+
+**Features**
+- **AI video wishes (≤30s).** Per-friend `preferredContentKind` (message / photo /
+  video). Video flows through the same generate→approve→deliver pipeline, persisted
+  to Blob and delivered as a WhatsApp video message. Provider behind
+  `VIDEO_PROVIDER` (stub now; Replicate/Firefly slots ready).
+- **Outbound invites.** Invite an unregistered friend by phone; on sign-up they're
+  auto-linked and the invite is marked accepted. (Production note: business-initiated
+  WhatsApp outside the 24h window needs an approved template, or send via SMS.)
+- **LLM/media cost attribution.** Every model/provider call is logged to `ai_usage`
+  with tokens + computed USD (`src/lib/ai/pricing.ts`), surfaced per-draft on the
+  approval screen and month-to-date on Settings.
+
+> **Schema changed in Phase 2** — run `npm run db:push` again. New: `otp_requests`,
+> `ai_usage`, `invites` tables; `content_drafts.claimed_at`,
+> `users.active_approval_draft_id`, `friends.preferred_content_kind` columns.
+
+**Phase 3 (deferred):** native mobile app for device address-book import.
+
 ## Design notes — WhatsApp reality check
 
 - **There is no social "Login with WhatsApp."** The only real mechanism is phone + OTP over

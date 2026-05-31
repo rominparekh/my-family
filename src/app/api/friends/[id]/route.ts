@@ -37,6 +37,8 @@ export async function PATCH(req: Request, { params }: Params) {
     if (input.name !== undefined) updates.name = input.name;
     if (input.timezone !== undefined) updates.timezone = input.timezone;
     if (input.notes !== undefined) updates.notes = input.notes;
+    if (input.preferredContentKind !== undefined)
+      updates.preferredContentKind = input.preferredContentKind;
 
     if (input.phone !== undefined) {
       if (input.phone === null || input.phone === "") {

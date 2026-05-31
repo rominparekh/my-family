@@ -3,6 +3,10 @@ import { db } from "@/db/client";
 import { contentDrafts, friends, specialDays, relationships, users } from "@/db/schema";
 import { generateWishText, type WishContext } from "@/lib/ai/text";
 import { getImageProvider } from "@/lib/ai/image";
+import { getVideoProvider } from "@/lib/ai/video";
+import { persistRemoteMedia } from "@/lib/media";
+import { recordUsage } from "@/lib/ai/usage";
+import { textCostUsd, imageCostUsd, videoCostUsd } from "@/lib/ai/pricing";
 import { CONTENT_LIMITS, type ContentKind } from "@/lib/constants";
 
 export interface GeneratedContent {
@@ -64,7 +68,22 @@ export async function generateForDraft(
     previousText: feedback ? draft.textBody ?? undefined : undefined,
   };
 
-  const textBody = await generateWishText(ctx);
+  const textResult = await generateWishText(ctx);
+  const textBody = textResult.text;
+
+  // Attribute the text generation cost to this draft + owner.
+  await recordUsage({
+    userId: draft.ownerUserId,
+    draftId,
+    kind: "text",
+    provider: textResult.model === "fallback" ? "none" : "anthropic",
+    model: textResult.model,
+    inputTokens: textResult.usage.inputTokens,
+    outputTokens: textResult.usage.outputTokens,
+    cacheReadTokens: textResult.usage.cacheReadTokens,
+    cacheWriteTokens: textResult.usage.cacheWriteTokens,
+    costUsd: textCostUsd(textResult.model, textResult.usage),
+  });
 
   const kind: ContentKind = draft.kind;
   let mediaUrls: string[] = [];
@@ -73,9 +92,41 @@ export async function generateForDraft(
     const imagePrompt = `A warm, celebratory ${occasion} image for ${friend.name}${
       ctx.relationType ? ` (${ctx.relationType})` : ""
     }. Festive, heartfelt, tasteful. ${feedback ?? ""}`.trim();
-    mediaUrls = await provider.generate({
+    const generated = await provider.generate({
       prompt: imagePrompt,
       count: Math.min(CONTENT_LIMITS.PHOTO_MAX_COUNT, 1),
+    });
+    // Re-host into Blob so delivery uses stable URLs WhatsApp can fetch.
+    mediaUrls = await persistRemoteMedia(generated, { draftId, kind });
+
+    await recordUsage({
+      userId: draft.ownerUserId,
+      draftId,
+      kind: "image",
+      provider: provider.name,
+      model: provider.name,
+      units: generated.length,
+      costUsd: imageCostUsd(provider.name, generated.length),
+    });
+  } else if (kind === "video") {
+    const provider = getVideoProvider();
+    const videoPrompt = `A short, warm ${occasion} video greeting for ${friend.name}${
+      ctx.relationType ? ` (${ctx.relationType})` : ""
+    }. Heartfelt and tasteful, under ${CONTENT_LIMITS.VIDEO_MAX_SECONDS}s. ${feedback ?? ""}`.trim();
+    const result = await provider.generate({
+      prompt: videoPrompt,
+      seconds: CONTENT_LIMITS.VIDEO_MAX_SECONDS,
+    });
+    mediaUrls = await persistRemoteMedia([result.url], { draftId, kind });
+
+    await recordUsage({
+      userId: draft.ownerUserId,
+      draftId,
+      kind: "video",
+      provider: provider.name,
+      model: provider.name,
+      units: 1,
+      costUsd: videoCostUsd(provider.name, 1),
     });
   }
 

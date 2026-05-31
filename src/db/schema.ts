@@ -6,6 +6,7 @@ import {
   integer,
   boolean,
   jsonb,
+  numeric,
   pgEnum,
   index,
   uniqueIndex,
@@ -65,6 +66,9 @@ export const users = pgTable(
     // Whether other users adding this number can auto-link to this account.
     discoverable: boolean("discoverable").notNull().default(true),
     waVerified: boolean("wa_verified").notNull().default(false),
+    // Routes a user's free-text WhatsApp replies to the draft we last asked them
+    // to approve, disambiguating when several drafts are pending at once.
+    activeApprovalDraftId: uuid("active_approval_draft_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -91,6 +95,23 @@ export const otpCodes = pgTable(
   })
 );
 
+// ── OTP request log (append-only) for rate limiting ──
+// Separate from otp_codes (which is deleted on re-issue) so attackers can't
+// reset their request budget by simply asking for a new code.
+export const otpRequests = pgTable(
+  "otp_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    phoneE164: text("phone_e164").notNull(),
+    ip: text("ip"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    phoneTimeIdx: index("otp_requests_phone_time_idx").on(t.phoneE164, t.createdAt),
+    ipTimeIdx: index("otp_requests_ip_time_idx").on(t.ip, t.createdAt),
+  })
+);
+
 // ── Friends (contact records owned by a user) ──
 export const friends = pgTable(
   "friends",
@@ -105,6 +126,10 @@ export const friends = pgTable(
     timezone: text("timezone").notNull().default("UTC"),
     notes: text("notes"),
     avatarUrl: text("avatar_url"),
+    // What kind of wish to generate for this friend's special days.
+    preferredContentKind: contentKindEnum("preferred_content_kind")
+      .notNull()
+      .default("text"),
     // If this friend is also a registered user, link to them for discovery/auto-add.
     linkedUserId: uuid("linked_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -203,6 +228,10 @@ export const contentDrafts = pgTable(
     mediaUrls: jsonb("media_urls").$type<string[]>().notNull().default([]),
     generationPrompt: text("generation_prompt"),
     revision: integer("revision").notNull().default(0),
+    // Atomically set by the workflow run that "owns" this draft (compare-and-swap
+    // on NULL). Guarantees exactly one workflow processes an occasion even though
+    // the hourly cron may emit the same occasion many times within the lead window.
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
@@ -256,6 +285,62 @@ export const notifications = pgTable(
   },
   (t) => ({
     userIdx: index("notifications_user_idx").on(t.userId),
+  })
+);
+
+// ── AI usage ledger (cost attribution) ──
+// One row per model/provider call, attributed to a user and (when applicable) a
+// draft, so we can roll up spend per user, per draft, and per month.
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    draftId: uuid("draft_id").references(() => contentDrafts.id, { onDelete: "set null" }),
+    kind: text("kind").notNull(), // text | image | video
+    provider: text("provider").notNull(), // anthropic | replicate | firefly | stub
+    model: text("model").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    units: integer("units").notNull().default(0), // images/videos/seconds generated
+    costUsd: numeric("cost_usd", { precision: 12, scale: 6 }).notNull().default("0"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userTimeIdx: index("ai_usage_user_time_idx").on(t.userId, t.createdAt),
+    draftIdx: index("ai_usage_draft_idx").on(t.draftId),
+  })
+);
+
+// ── Invites (Phase 2: invite unregistered friends to join) ──
+export const invites = pgTable(
+  "invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inviterUserId: uuid("inviter_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    friendId: uuid("friend_id").references(() => friends.id, { onDelete: "set null" }),
+    phoneE164: text("phone_e164").notNull(),
+    phoneHash: text("phone_hash").notNull(),
+    token: text("token").notNull(),
+    status: text("status").notNull().default("pending"), // pending | accepted | revoked
+    channel: text("channel").notNull().default("whatsapp"), // whatsapp | sms
+    waMessageId: text("wa_message_id"),
+    acceptedUserId: uuid("accepted_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tokenUnique: uniqueIndex("invites_token_unique").on(t.token),
+    inviterIdx: index("invites_inviter_idx").on(t.inviterUserId),
+    phoneHashIdx: index("invites_phone_hash_idx").on(t.phoneHash),
   })
 );
 
@@ -334,3 +419,6 @@ export type ContentDraft = typeof contentDrafts.$inferSelect;
 export type NewContentDraft = typeof contentDrafts.$inferInsert;
 export type DraftMessage = typeof draftMessages.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type AiUsage = typeof aiUsage.$inferSelect;
+export type NewAiUsage = typeof aiUsage.$inferInsert;
+export type Invite = typeof invites.$inferSelect;

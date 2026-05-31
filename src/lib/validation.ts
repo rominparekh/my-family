@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RELATION_TYPES, SPECIAL_DAY_TYPES } from "@/lib/constants";
+import { RELATION_TYPES, SPECIAL_DAY_TYPES, CONTENT_KINDS } from "@/lib/constants";
 
 export const specialDayInput = z
   .object({
@@ -33,6 +33,7 @@ export const updateFriendInput = z.object({
   phone: z.string().trim().max(40).nullable().optional(),
   timezone: z.string().trim().min(1).max(64).optional(),
   notes: z.string().trim().max(4000).nullable().optional(),
+  preferredContentKind: z.enum(CONTENT_KINDS).optional(),
 });
 
 export type CreateFriendInput = z.infer<typeof createFriendInput>;
