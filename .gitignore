@@ -1,0 +1,16 @@
+node_modules
+.next
+
+# Local Claude Code harness settings — not part of the project
+.claude/settings.local.json
+out
+build
+# Never commit secrets — ignore all env files except the example template.
+.env
+.env.*
+!.env.example
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+drizzle/.cache
