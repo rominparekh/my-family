@@ -15,8 +15,12 @@ function leadDays(): number {
 }
 
 /**
- * Runs hourly (vercel.json cron). Finds special days whose next occurrence is
- * within the lead window and emits one `occasion/upcoming` event per occasion.
+ * Runs daily (vercel.json cron; Hobby plan allows one run/day). Finds special
+ * days whose next occurrence is within the lead window and emits one
+ * `occasion/upcoming` event per occasion. A daily cadence is sufficient because
+ * the lead window (APPROVAL_LEAD_DAYS, default 3) gives multiple days of margin
+ * to discover an occasion, and exact delivery timing is handled by the Inngest
+ * function's sleepUntil — not this scan.
  *
  * Crucially, the cron does NOT write the draft. It only emits an event with a
  * deterministic dedup id; the Inngest function creates and atomically claims the
