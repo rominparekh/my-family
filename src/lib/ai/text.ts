@@ -59,46 +59,59 @@ export interface WishTextResult {
 export async function generateWishText(ctx: WishContext): Promise<WishTextResult> {
   const zeroUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
-  // Fallback when no API key — keeps the whole flow runnable in dev.
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const fallback = (): WishTextResult => {
     const base = `Happy ${ctx.occasion}, ${ctx.friendName}! Wishing you a wonderful day. — ${ctx.senderName}`;
-    return {
-      text: base.slice(0, CONTENT_LIMITS.TEXT_MAX_CHARS),
-      model: "fallback",
-      usage: zeroUsage,
+    return { text: base.slice(0, CONTENT_LIMITS.TEXT_MAX_CHARS), model: "fallback", usage: zeroUsage };
+  };
+
+  // No key configured — use the simple template (keeps the flow runnable).
+  if (!process.env.ANTHROPIC_API_KEY) return fallback();
+
+  try {
+    const msg = await client().messages.create({
+      model: MODEL,
+      max_tokens: 300,
+      messages: [{ role: "user", content: buildPrompt(ctx) }],
+    });
+
+    const text = msg.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim()
+      .replace(/^["']|["']$/g, "");
+
+    if (!text) return fallback();
+
+    // Cache token fields exist at runtime; read them defensively across SDK versions.
+    const u = msg.usage as {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number | null;
+      cache_creation_input_tokens?: number | null;
     };
+    return {
+      text: enforceLimit(text, ctx),
+      model: MODEL,
+      usage: {
+        inputTokens: u.input_tokens ?? 0,
+        outputTokens: u.output_tokens ?? 0,
+        cacheReadTokens: u.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
+      },
+    };
+  } catch (err) {
+    // Invalid key, rate limit, model error, etc. — degrade gracefully rather than
+    // failing the whole generate→approve flow. Surfaced in logs for debugging.
+    console.error(
+      JSON.stringify({
+        level: "error",
+        msg: "ai.text.generation_failed",
+        err: err instanceof Error ? err.message : String(err),
+      })
+    );
+    return fallback();
   }
-
-  const msg = await client().messages.create({
-    model: MODEL,
-    max_tokens: 300,
-    messages: [{ role: "user", content: buildPrompt(ctx) }],
-  });
-
-  const text = msg.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim()
-    .replace(/^["']|["']$/g, "");
-
-  // Cache token fields exist at runtime; read them defensively across SDK versions.
-  const u = msg.usage as {
-    input_tokens?: number;
-    output_tokens?: number;
-    cache_read_input_tokens?: number | null;
-    cache_creation_input_tokens?: number | null;
-  };
-  return {
-    text: enforceLimit(text, ctx),
-    model: MODEL,
-    usage: {
-      inputTokens: u.input_tokens ?? 0,
-      outputTokens: u.output_tokens ?? 0,
-      cacheReadTokens: u.cache_read_input_tokens ?? 0,
-      cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
-    },
-  };
 }
 
 function enforceLimit(text: string, ctx: WishContext): string {
