@@ -19,7 +19,8 @@ import { log } from "@/lib/log";
 export const generateWish = inngest.createFunction(
   {
     id: "generate-wish",
-    concurrency: { limit: 10 },
+    // Inngest free plan caps function concurrency at 5.
+    concurrency: { limit: 5 },
     // Collapse duplicate cron emits for the same occasion.
     idempotency: "event.data.specialDayId + '-' + event.data.occasionDate",
   },
