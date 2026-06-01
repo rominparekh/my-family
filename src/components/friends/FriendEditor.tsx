@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge, Button, Card, Input, Label, Select, Textarea } from "@/components/ui";
+import TimezoneSelect from "@/components/TimezoneSelect";
 import { RELATION_TYPES, SPECIAL_DAY_TYPES, CONTENT_KINDS } from "@/lib/constants";
 
 interface SpecialDay {
@@ -140,8 +141,8 @@ function DetailsCard({
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+14155550123" />
         </div>
         <div>
-          <Label>Timezone (IANA)</Label>
-          <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Los_Angeles" />
+          <Label>Timezone</Label>
+          <TimezoneSelect value={timezone} onChange={setTimezone} />
         </div>
         <div>
           <Label>Wish type for their special days</Label>

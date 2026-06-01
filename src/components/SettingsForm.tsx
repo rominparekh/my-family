@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, Label } from "@/components/ui";
+import TimezoneSelect from "@/components/TimezoneSelect";
 
 export default function SettingsForm({
   initial,
@@ -66,8 +67,8 @@ export default function SettingsForm({
         </p>
       </div>
       <div>
-        <Label>Your timezone (IANA)</Label>
-        <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+        <Label>Your timezone</Label>
+        <TimezoneSelect value={timezone} onChange={setTimezone} />
       </div>
       <label className="flex items-start gap-3 rounded-xl bg-neutral-50 p-3">
         <input
