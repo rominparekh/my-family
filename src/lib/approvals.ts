@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, atomic } from "@/db/client";
 import { contentDrafts, draftMessages, notifications, users } from "@/db/schema";
-import { inngest } from "@/inngest/client";
+import { generateForDraft } from "@/lib/ai/generate";
 
 const ACTIONABLE = ["pending_approval", "changes_requested"] as const;
 
@@ -102,9 +102,27 @@ export async function applyDecision(opts: {
       .where(eq(contentDrafts.id, draftId)),
   ]);
 
-  // Signal the workflow only after the DB commit succeeds.
-  await inngest.send({
-    name: "approval/responded",
-    data: { draftId, decision, feedback, channel },
-  });
+  // On "request changes", regenerate right away with the feedback (synchronous —
+  // no Inngest round-trip needed for a single revision) and leave it ready to
+  // review again.
+  if (decision === "changes") {
+    const content = await generateForDraft(draftId, feedback);
+    await db
+      .update(contentDrafts)
+      .set({
+        textBody: content.textBody,
+        mediaUrls: content.mediaUrls,
+        generationPrompt: content.prompt,
+        revision: sql`${contentDrafts.revision} + 1`,
+        status: "pending_approval",
+        updatedAt: new Date(),
+      })
+      .where(eq(contentDrafts.id, draftId));
+    await db.insert(draftMessages).values({
+      draftId,
+      role: "assistant",
+      channel: "web",
+      body: content.textBody,
+    });
+  }
 }

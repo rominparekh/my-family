@@ -13,14 +13,6 @@ type Events = {
       kind: "text" | "photo" | "video";
     };
   };
-  "approval/responded": {
-    data: {
-      draftId: string;
-      decision: "approved" | "changes";
-      feedback?: string;
-      channel: "whatsapp" | "web";
-    };
-  };
 };
 
 export const inngest = new Inngest({
