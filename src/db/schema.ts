@@ -349,6 +349,26 @@ export const invites = pgTable(
   })
 );
 
+// ── Web Push subscriptions ──
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    endpointUnique: uniqueIndex("push_subscriptions_endpoint_unique").on(t.endpoint),
+    userIdx: index("push_subscriptions_user_idx").on(t.userId),
+  })
+);
+
 // ── Relations (for Drizzle relational queries) ──
 export const usersRelations = relations(users, ({ many }) => ({
   friends: many(friends),
@@ -427,3 +447,4 @@ export type Notification = typeof notifications.$inferSelect;
 export type AiUsage = typeof aiUsage.$inferSelect;
 export type NewAiUsage = typeof aiUsage.$inferInsert;
 export type Invite = typeof invites.$inferSelect;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;

@@ -1,4 +1,5 @@
 import { toWaRecipient } from "@/lib/phone";
+import { log } from "@/lib/log";
 
 const GRAPH_VERSION = "v21.0";
 
@@ -20,28 +21,57 @@ async function postMessage(payload: Record<string, unknown>): Promise<string | n
   // In local/dev without credentials we log instead of throwing, so the whole
   // flow remains runnable end-to-end.
   if (!phoneNumberId || !accessToken) {
-    console.warn("[whatsapp] credentials missing — would have sent:", JSON.stringify(payload));
+    log.warn("whatsapp.skip_no_credentials", { to: payload.to, type: payload.type });
     return null;
   }
 
-  const res = await fetch(
-    `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ messaging_product: "whatsapp", ...payload }),
-    }
-  );
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
+  log.info("whatsapp.request", {
+    to: payload.to,
+    type: payload.type,
+    phoneNumberId,
+    url,
+  });
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ messaging_product: "whatsapp", ...payload }),
+  });
+
+  // Read the body once as text, then parse — so we can log it either way.
+  const bodyText = await res.text();
+  let body: unknown = bodyText;
+  try {
+    body = JSON.parse(bodyText);
+  } catch {
+    /* leave as text */
+  }
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`WhatsApp send failed (${res.status}): ${text}`);
+    log.error("whatsapp.response_error", { status: res.status, to: payload.to, body });
+    throw new Error(`WhatsApp send failed (${res.status}): ${bodyText}`);
   }
-  const json = (await res.json()) as { messages?: { id: string }[] };
-  return json.messages?.[0]?.id ?? null;
+
+  const json = body as {
+    messages?: { id: string; message_status?: string }[];
+    contacts?: { input?: string; wa_id?: string }[];
+  };
+  const messageId = json.messages?.[0]?.id ?? null;
+  log.info("whatsapp.response_ok", {
+    status: res.status,
+    to: payload.to,
+    messageId,
+    // "accepted" here means WhatsApp queued it — NOT that it reached the phone.
+    messageStatus: json.messages?.[0]?.message_status,
+    // wa_id present + matching means the number is a valid WhatsApp user.
+    waId: json.contacts?.[0]?.wa_id,
+    input: json.contacts?.[0]?.input,
+  });
+  return messageId;
 }
 
 /**

@@ -5,6 +5,7 @@ import { contentDrafts, friends, notifications } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { sendText, sendImage, sendVideo } from "@/lib/whatsapp/client";
 import { CONTENT_LIMITS } from "@/lib/constants";
+import { log } from "@/lib/log";
 
 export const maxDuration = 60;
 
@@ -35,20 +36,25 @@ export async function POST(_req: Request, { params }: { params: Promise<{ draftI
     }
 
     const text = draft.textBody ?? "";
+    let messageId: string | null = null;
     try {
       if (draft.kind === "video" && draft.mediaUrls[0]) {
-        await sendVideo(recipient, draft.mediaUrls[0], text);
+        messageId = await sendVideo(recipient, draft.mediaUrls[0], text);
       } else if (draft.mediaUrls.length > 0) {
         const urls = draft.mediaUrls.slice(0, CONTENT_LIMITS.PHOTO_MAX_COUNT);
         for (let i = 0; i < urls.length; i++) {
-          await sendImage(recipient, urls[i], i === 0 ? text : undefined);
+          const mid = await sendImage(recipient, urls[i], i === 0 ? text : undefined);
+          if (i === 0) messageId = mid;
         }
       } else {
-        await sendText(recipient, text);
+        messageId = await sendText(recipient, text);
       }
     } catch (err) {
+      log.error("send_now.failed", { draftId, recipient, err: err instanceof Error ? err.message : String(err) });
       return fail(`WhatsApp send failed: ${err instanceof Error ? err.message : String(err)}`, 502);
     }
+
+    log.info("send_now.accepted", { draftId, recipient, messageId });
 
     await db
       .update(contentDrafts)
@@ -60,8 +66,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ draftI
       channel: "whatsapp",
       type: "delivered",
       status: "sent",
+      waMessageId: messageId,
     });
 
-    return ok({ sent: true, to: recipient });
+    // accepted: WhatsApp queued it. Delivery to the phone still depends on an
+    // open 24h session window (for non-template messages) — confirmed via the
+    // status webhook, not this response.
+    return ok({ sent: true, to: recipient, messageId, note: "accepted by WhatsApp (queued)" });
   });
 }

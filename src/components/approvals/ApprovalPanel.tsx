@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge, Button, Card, Textarea } from "@/components/ui";
+import { buildWaShareLink, composeShareText } from "@/lib/whatsapp/share";
 
 interface Draft {
   id: string;
@@ -13,6 +14,7 @@ interface Draft {
   textBody: string | null;
   mediaUrls: string[];
   friendName: string;
+  friendPhone: string | null;
   occasionWhen: string;
   costUsd: number;
 }
@@ -78,6 +80,9 @@ export default function ApprovalPanel({
     }
   }
 
+  const shareText = composeShareText(draft.textBody, draft.mediaUrls);
+  const waLink = buildWaShareLink(draft.friendPhone, shareText);
+
   return (
     <div className="space-y-6">
       <Link href="/approvals" className="text-sm text-neutral-500 hover:underline">
@@ -126,6 +131,27 @@ export default function ApprovalPanel({
           )}
         </div>
       </Card>
+
+      {draft.textBody && (
+        <Card className="space-y-2 border-green-300 bg-green-50/40">
+          <h2 className="font-semibold">Send via WhatsApp — from you 💬</h2>
+          <p className="text-sm text-neutral-600">
+            Opens <span className="font-medium">your</span> WhatsApp with this message ready to
+            send to {draft.friendName}
+            {draft.friendPhone ? ` (${draft.friendPhone})` : ""}. It comes straight from you, so
+            it always delivers — no 24-hour window, no templates.
+          </p>
+          <a href={waLink} target="_blank" rel="noopener noreferrer">
+            <Button>Open WhatsApp to send</Button>
+          </a>
+          {!draft.friendPhone && (
+            <p className="text-xs text-amber-700">
+              No phone saved for {draft.friendName} — WhatsApp will ask you to pick the
+              recipient. Add their number on the friend page to pre-address it.
+            </p>
+          )}
+        </Card>
+      )}
 
       {!locked && (
         <Card className="space-y-3">

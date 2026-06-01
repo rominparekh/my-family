@@ -1,10 +1,17 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { ok, fail } from "@/lib/api";
 import { db } from "@/db/client";
-import { specialDays, friends } from "@/db/schema";
+import { specialDays, friends, contentDrafts } from "@/db/schema";
 import { nextOccurrence } from "@/lib/timezone";
 import { inngest } from "@/inngest/client";
+import { pushToUser } from "@/lib/push";
 import { log } from "@/lib/log";
+
+function occasionLabel(type: string, label: string | null): string {
+  if (type === "birthday") return "birthday";
+  if (type === "anniversary") return "anniversary";
+  return label || "special day";
+}
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -40,9 +47,12 @@ export async function GET(req: Request) {
   const rows = await db
     .select({
       dayId: specialDays.id,
+      type: specialDays.type,
+      label: specialDays.label,
       month: specialDays.month,
       day: specialDays.day,
       friendId: friends.id,
+      friendName: friends.name,
       ownerUserId: friends.ownerUserId,
       timezone: friends.timezone,
       preferredKind: friends.preferredContentKind,
@@ -64,9 +74,13 @@ export async function GET(req: Request) {
     };
   }[] = [];
 
+  // Occasions that are TODAY (in the friend's tz) → push a "ready to send" nudge.
+  const dueToday: typeof rows = [];
+
   for (const row of rows) {
     scanned++;
     const occ = nextOccurrence(row.month, row.day, row.timezone);
+    if (occ.daysUntil === 0) dueToday.push(row);
     if (occ.daysUntil > lead) continue;
 
     events.push({
@@ -88,6 +102,28 @@ export async function GET(req: Request) {
   // Batched send (one network round-trip) instead of N awaited sends.
   if (events.length > 0) await inngest.send(events);
 
-  log.info("cron.scan", { scanned, queued: events.length, leadDays: lead });
-  return ok({ scanned, queued: events.length, leadDays: lead });
+  // Send "send your wish today" push reminders. Deep-link to the prepared draft
+  // if one exists, otherwise to the friend page (where they can Generate + send).
+  let reminded = 0;
+  for (const row of dueToday) {
+    const occasionDate = nextOccurrence(row.month, row.day, row.timezone).occasionDate;
+    const draft = await db.query.contentDrafts.findFirst({
+      where: and(
+        eq(contentDrafts.specialDayId, row.dayId),
+        eq(contentDrafts.occasionDate, occasionDate)
+      ),
+    });
+    const url = draft ? `/approvals/${draft.id}` : `/friends/${row.friendId}`;
+    const occasion = occasionLabel(row.type, row.label);
+    const sent = await pushToUser(row.ownerUserId, {
+      title: `🎉 ${row.friendName}'s ${occasion} is today`,
+      body: `Tap to send ${row.friendName} your wish.`,
+      url,
+      tag: `occasion:${row.dayId}:${occasionDate}`,
+    });
+    if (sent > 0) reminded++;
+  }
+
+  log.info("cron.scan", { scanned, queued: events.length, reminded, leadDays: lead });
+  return ok({ scanned, queued: events.length, reminded, leadDays: lead });
 }

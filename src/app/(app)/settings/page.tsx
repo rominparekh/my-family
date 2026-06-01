@@ -2,6 +2,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { userMonthToDate } from "@/lib/ai/usage";
 import { Card } from "@/components/ui";
 import SettingsForm from "@/components/SettingsForm";
+import NotificationsCard from "@/components/NotificationsCard";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,8 @@ export default async function SettingsPage() {
           phoneE164: user.phoneE164 ?? "",
         }}
       />
+
+      <NotificationsCard />
 
       <Card className="space-y-3">
         <div className="flex items-baseline justify-between">

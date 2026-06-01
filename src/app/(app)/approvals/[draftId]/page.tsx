@@ -44,6 +44,7 @@ export default async function ApprovalDetailPage({
         textBody: draft.textBody,
         mediaUrls: draft.mediaUrls,
         friendName: draft.friend?.name ?? "Friend",
+        friendPhone: draft.friend?.phoneE164 ?? null,
         occasionWhen,
         costUsd,
       }}
