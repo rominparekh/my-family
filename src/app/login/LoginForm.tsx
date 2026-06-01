@@ -82,7 +82,8 @@ export default function LoginForm() {
         <div>
           <Label>Email</Label>
           <Input
-            type="email"
+            // signin accepts a legacy username too, so don't force email validation
+            type={mode === "register" ? "email" : "text"}
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
