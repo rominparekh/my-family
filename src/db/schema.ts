@@ -58,9 +58,13 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    phoneE164: text("phone_e164").notNull(),
+    // Username/password login (primary auth). Username stored lowercase.
+    username: text("username"),
+    passwordHash: text("password_hash"),
+    // Phone is now optional (used only for WhatsApp delivery + friend discovery).
+    phoneE164: text("phone_e164"),
     // SHA-256 of the E.164 number, used for privacy-preserving discovery matching.
-    phoneHash: text("phone_hash").notNull(),
+    phoneHash: text("phone_hash"),
     displayName: text("display_name"),
     timezone: text("timezone").notNull().default("UTC"),
     // Whether other users adding this number can auto-link to this account.
@@ -73,6 +77,7 @@ export const users = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
+    usernameUnique: uniqueIndex("users_username_unique").on(t.username),
     phoneUnique: uniqueIndex("users_phone_unique").on(t.phoneE164),
     phoneHashIdx: index("users_phone_hash_idx").on(t.phoneHash),
   })

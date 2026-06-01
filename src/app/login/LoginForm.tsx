@@ -4,58 +4,44 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Card, Input, Label } from "@/components/ui";
 
-type Step = "phone" | "code";
+type Mode = "signin" | "register";
 
 export default function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/dashboard";
 
-  const invited = params.get("invited") === "1";
-  const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState(params.get("phone") ?? "");
-  const [code, setCode] = useState("");
+  const [mode, setMode] = useState<Mode>("signin");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [timezone] = useState(() =>
-    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
-  );
-  const [devCode, setDevCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function requestCode(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/request-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "Could not send code");
-      setDevCode(json.data?.devCode ?? null);
-      setStep("code");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-  async function verify(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/verify-otp", {
+      const endpoint = mode === "signin" ? "/api/auth/login" : "/api/auth/register";
+      const body =
+        mode === "signin"
+          ? { username, password }
+          : { username, password, displayName: displayName || undefined, timezone };
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code, displayName, timezone }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "Verification failed");
+      if (!res.ok || !json.ok) {
+        const issue = json.issues?.fieldErrors
+          ? Object.values(json.issues.fieldErrors).flat()[0]
+          : null;
+        throw new Error(issue || json.error || "Something went wrong");
+      }
       router.push(next);
       router.refresh();
     } catch (err) {
@@ -67,13 +53,25 @@ export default function LoginForm() {
 
   return (
     <Card>
-      {invited && step === "phone" && (
-        <p className="mb-4 rounded-lg bg-brand-50 p-2 text-sm text-brand-700">
-          🎉 You&apos;ve been invited! Sign in to join and start celebrating together.
-        </p>
-      )}
-      {step === "phone" ? (
-        <form onSubmit={requestCode} className="space-y-4">
+      <div className="mb-5 flex gap-1 rounded-lg bg-neutral-100 p-1">
+        <button
+          type="button"
+          onClick={() => { setMode("signin"); setError(null); }}
+          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium ${mode === "signin" ? "bg-white shadow-sm" : "text-neutral-500"}`}
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          onClick={() => { setMode("register"); setError(null); }}
+          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium ${mode === "register" ? "bg-white shadow-sm" : "text-neutral-500"}`}
+        >
+          Create account
+        </button>
+      </div>
+
+      <form onSubmit={submit} className="space-y-4">
+        {mode === "register" && (
           <div>
             <Label>Your name</Label>
             <Input
@@ -82,57 +80,36 @@ export default function LoginForm() {
               onChange={(e) => setDisplayName(e.target.value)}
             />
           </div>
-          <div>
-            <Label>Phone number</Label>
-            <Input
-              placeholder="+1 415 555 0123"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              inputMode="tel"
-              required
-            />
-            <p className="mt-1 text-xs text-neutral-400">
-              Include your country code.
-            </p>
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Sending…" : "Send code"}
-          </Button>
-        </form>
-      ) : (
-        <form onSubmit={verify} className="space-y-4">
-          {devCode && (
-            <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
-              Dev mode (no WhatsApp configured): your code is{" "}
-              <span className="font-mono font-bold">{devCode}</span>
-            </p>
-          )}
-          <div>
-            <Label>Enter the 6-digit code</Label>
-            <Input
-              placeholder="123456"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              inputMode="numeric"
-              maxLength={6}
-              required
-            />
-            <p className="mt-1 text-xs text-neutral-400">Sent to {phone}</p>
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Verifying…" : "Verify & continue"}
-          </Button>
-          <button
-            type="button"
-            className="w-full text-center text-xs text-neutral-500 hover:underline"
-            onClick={() => setStep("phone")}
-          >
-            Use a different number
-          </button>
-        </form>
-      )}
+        )}
+        <div>
+          <Label>Username</Label>
+          <Input
+            placeholder="rominparekh"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoCapitalize="none"
+            autoCorrect="off"
+            required
+          />
+        </div>
+        <div>
+          <Label>Password</Label>
+          <Input
+            type="password"
+            placeholder={mode === "register" ? "At least 8 characters" : "Your password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete={mode === "register" ? "new-password" : "current-password"}
+            required
+          />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading
+            ? mode === "signin" ? "Signing in…" : "Creating…"
+            : mode === "signin" ? "Sign in" : "Create account"}
+        </Button>
+      </form>
     </Card>
   );
 }

@@ -11,6 +11,7 @@ export default function SettingsForm({
     displayName: string;
     timezone: string;
     discoverable: boolean;
+    username: string;
     phoneE164: string;
   };
 }) {
@@ -44,8 +45,8 @@ export default function SettingsForm({
   return (
     <Card className="space-y-4">
       <div>
-        <Label>Phone (your sign-in number)</Label>
-        <Input value={initial.phoneE164} disabled />
+        <Label>Username</Label>
+        <Input value={initial.username} disabled />
       </div>
       <div>
         <Label>Display name</Label>

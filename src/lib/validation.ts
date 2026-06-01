@@ -1,6 +1,26 @@
 import { z } from "zod";
 import { RELATION_TYPES, SPECIAL_DAY_TYPES, CONTENT_KINDS } from "@/lib/constants";
 
+export const usernameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, "Username must be at least 3 characters")
+  .max(30)
+  .regex(/^[a-z0-9_.]+$/, "Use letters, numbers, underscore or dot only");
+
+export const registerInput = z.object({
+  username: usernameSchema,
+  password: z.string().min(8, "Password must be at least 8 characters").max(200),
+  displayName: z.string().trim().min(1).max(80).optional(),
+  timezone: z.string().trim().min(1).max(64).optional(),
+});
+
+export const loginInput = z.object({
+  username: usernameSchema,
+  password: z.string().min(1).max(200),
+});
+
 export const specialDayInput = z
   .object({
     type: z.enum(SPECIAL_DAY_TYPES),

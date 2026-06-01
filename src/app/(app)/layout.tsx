@@ -25,7 +25,10 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen">
-      <AppNav name={user.displayName ?? user.phoneE164} pendingCount={Number(pendingCount)} />
+      <AppNav
+        name={user.displayName ?? user.username ?? "Account"}
+        pendingCount={Number(pendingCount)}
+      />
       <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
     </div>
   );

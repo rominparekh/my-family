@@ -6,9 +6,9 @@ export default function LoginPage() {
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
       <div className="mb-6 text-center">
         <div className="mb-2 text-4xl">🎉</div>
-        <h1 className="text-2xl font-bold">Sign in</h1>
+        <h1 className="text-2xl font-bold">Welcome</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          We&apos;ll send a one-time code to your WhatsApp.
+          Sign in or create an account to get started.
         </p>
       </div>
       <Suspense>

@@ -12,7 +12,18 @@ function secretKey(): Uint8Array {
 
 export interface SessionPayload {
   userId: string;
-  phoneE164: string;
+  username?: string;
+  phoneE164?: string;
+}
+
+// A session is valid as long as it carries a userId; the identifier (username or
+// phone) is informational.
+function toSession(payload: Record<string, unknown>): SessionPayload | null {
+  if (typeof payload.userId !== "string") return null;
+  const s: SessionPayload = { userId: payload.userId };
+  if (typeof payload.username === "string") s.username = payload.username;
+  if (typeof payload.phoneE164 === "string") s.phoneE164 = payload.phoneE164;
+  return s;
 }
 
 export async function createSession(payload: SessionPayload): Promise<void> {
@@ -38,10 +49,7 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey());
-    if (typeof payload.userId === "string" && typeof payload.phoneE164 === "string") {
-      return { userId: payload.userId, phoneE164: payload.phoneE164 };
-    }
-    return null;
+    return toSession(payload);
   } catch {
     return null;
   }
@@ -56,10 +64,7 @@ export async function destroySession(): Promise<void> {
 export async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey());
-    if (typeof payload.userId === "string" && typeof payload.phoneE164 === "string") {
-      return { userId: payload.userId, phoneE164: payload.phoneE164 };
-    }
-    return null;
+    return toSession(payload);
   } catch {
     return null;
   }

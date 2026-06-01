@@ -30,7 +30,8 @@ export default async function SettingsPage() {
           displayName: user.displayName ?? "",
           timezone: user.timezone,
           discoverable: user.discoverable,
-          phoneE164: user.phoneE164,
+          username: user.username ?? "",
+          phoneE164: user.phoneE164 ?? "",
         }}
       />
 

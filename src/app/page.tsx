@@ -20,11 +20,11 @@ export default async function LandingPage() {
           href={session ? "/dashboard" : "/login"}
           className="rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700"
         >
-          {session ? "Go to dashboard" : "Sign in with WhatsApp"}
+          {session ? "Go to dashboard" : "Get started"}
         </Link>
       </div>
       <p className="mt-6 text-xs text-neutral-400">
-        Sign in with your phone number — we send a code over WhatsApp.
+        Create an account with a username and password.
       </p>
     </main>
   );
