@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { CONTENT_LIMITS } from "@/lib/constants";
+import { bedrockEnabled, generateWithBedrock } from "@/lib/ai/bedrock";
 
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 
@@ -64,7 +65,29 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
     return { text: base.slice(0, CONTENT_LIMITS.TEXT_MAX_CHARS), model: "fallback", usage: zeroUsage };
   };
 
-  // No key configured — use the simple template (keeps the flow runnable).
+  const logFail = (where: string, err: unknown) =>
+    console.error(
+      JSON.stringify({
+        level: "error",
+        msg: "ai.text.generation_failed",
+        where,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    );
+
+  // Prefer Amazon Bedrock when a Bedrock API key is present.
+  if (bedrockEnabled()) {
+    try {
+      const r = await generateWithBedrock(buildPrompt(ctx), 300);
+      if (r.text) return { text: enforceLimit(r.text, ctx), model: r.model, usage: r.usage };
+      return fallback();
+    } catch (err) {
+      logFail("bedrock", err);
+      return fallback();
+    }
+  }
+
+  // No Anthropic key either — use the simple template (keeps the flow runnable).
   if (!process.env.ANTHROPIC_API_KEY) return fallback();
 
   try {
@@ -103,13 +126,7 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
   } catch (err) {
     // Invalid key, rate limit, model error, etc. — degrade gracefully rather than
     // failing the whole generate→approve flow. Surfaced in logs for debugging.
-    console.error(
-      JSON.stringify({
-        level: "error",
-        msg: "ai.text.generation_failed",
-        err: err instanceof Error ? err.message : String(err),
-      })
-    );
+    logFail("anthropic", err);
     return fallback();
   }
 }
