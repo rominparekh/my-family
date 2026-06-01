@@ -6,5 +6,8 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#g)"/>
-  <text x="50%" y="50%" dy="0.36em" text-anchor="middle" font-size="300">🎉</text>
+  <g transform="translate(106 116) scale(3)">
+    <path fill="#ffffff"
+      d="M50 88 C50 88 12 60 12 36 C12 22 24 14 36 18 C43 20 48 26 50 32 C52 26 57 20 64 18 C76 14 88 22 88 36 C88 60 50 88 50 88 Z"/>
+  </g>
 </svg>
