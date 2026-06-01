@@ -3,11 +3,11 @@ import { db } from "@/db/client";
 import { contentDrafts, friends, specialDays, relationships, users } from "@/db/schema";
 import { generateWishText, type WishContext } from "@/lib/ai/text";
 import { getImageProvider } from "@/lib/ai/image";
-import { getVideoProvider } from "@/lib/ai/video";
+import { findGif, gifProviderName } from "@/lib/ai/gif";
 import { persistRemoteMedia } from "@/lib/media";
 import { recordUsage } from "@/lib/ai/usage";
-import { textCostUsd, imageCostUsd, videoCostUsd } from "@/lib/ai/pricing";
-import { CONTENT_LIMITS, type ContentKind } from "@/lib/constants";
+import { textCostUsd, imageCostUsd } from "@/lib/ai/pricing";
+import { CONTENT_LIMITS } from "@/lib/constants";
 
 export interface GeneratedContent {
   textBody: string;
@@ -85,7 +85,7 @@ export async function generateForDraft(
     costUsd: textCostUsd(textResult.model, textResult.usage),
   });
 
-  const kind: ContentKind = draft.kind;
+  const kind = draft.kind; // DB enum (text | photo | gif | legacy video)
   let mediaUrls: string[] = [];
   if (kind === "photo") {
     const provider = getImageProvider();
@@ -108,25 +108,21 @@ export async function generateForDraft(
       units: generated.length,
       costUsd: imageCostUsd(provider.name, generated.length),
     });
-  } else if (kind === "video") {
-    const provider = getVideoProvider();
-    const videoPrompt = `A short, warm ${occasion} video greeting for ${friend.name}${
-      ctx.relationType ? ` (${ctx.relationType})` : ""
-    }. Heartfelt and tasteful, under ${CONTENT_LIMITS.VIDEO_MAX_SECONDS}s. ${feedback ?? ""}`.trim();
-    const result = await provider.generate({
-      prompt: videoPrompt,
-      seconds: CONTENT_LIMITS.VIDEO_MAX_SECONDS,
-    });
-    mediaUrls = await persistRemoteMedia([result.url], { draftId, kind });
+  } else if (kind === "gif") {
+    // A relevant GIF, sourced from Giphy and included as a link (wa.me is
+    // text-only, so WhatsApp renders the link as an animated preview).
+    const query = `${occasion}${ctx.relationType ? " " + ctx.relationType : ""}`.trim();
+    const gifUrl = await findGif(query);
+    if (gifUrl) mediaUrls = [gifUrl];
 
     await recordUsage({
       userId: draft.ownerUserId,
       draftId,
-      kind: "video",
-      provider: provider.name,
-      model: provider.name,
-      units: 1,
-      costUsd: videoCostUsd(provider.name, 1),
+      kind: "gif",
+      provider: gifProviderName(),
+      model: gifProviderName(),
+      units: gifUrl ? 1 : 0,
+      costUsd: 0,
     });
   }
 

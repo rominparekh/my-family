@@ -26,7 +26,9 @@ export const SPECIAL_DAY_TYPES = [
 ] as const;
 export type SpecialDayType = (typeof SPECIAL_DAY_TYPES)[number];
 
-export const CONTENT_KINDS = ["text", "photo", "video"] as const;
+// Selectable wish kinds. (The DB enum also still contains the legacy "video"
+// value, which is no longer offered.)
+export const CONTENT_KINDS = ["text", "photo", "gif"] as const;
 export type ContentKind = (typeof CONTENT_KINDS)[number];
 
 export const DRAFT_STATUSES = [

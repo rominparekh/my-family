@@ -12,15 +12,17 @@ function secretKey(): Uint8Array {
 
 export interface SessionPayload {
   userId: string;
+  email?: string;
   username?: string;
   phoneE164?: string;
 }
 
-// A session is valid as long as it carries a userId; the identifier (username or
-// phone) is informational.
+// A session is valid as long as it carries a userId; the identifier (email,
+// username, or phone) is informational.
 function toSession(payload: Record<string, unknown>): SessionPayload | null {
   if (typeof payload.userId !== "string") return null;
   const s: SessionPayload = { userId: payload.userId };
+  if (typeof payload.email === "string") s.email = payload.email;
   if (typeof payload.username === "string") s.username = payload.username;
   if (typeof payload.phoneE164 === "string") s.phoneE164 = payload.phoneE164;
   return s;

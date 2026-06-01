@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Card, Input, Label } from "@/components/ui";
 
@@ -12,9 +13,10 @@ export default function LoginForm() {
   const next = params.get("next") || "/dashboard";
 
   const [mode, setMode] = useState<Mode>("signin");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,8 +30,8 @@ export default function LoginForm() {
       const endpoint = mode === "signin" ? "/api/auth/login" : "/api/auth/register";
       const body =
         mode === "signin"
-          ? { username, password }
-          : { username, password, displayName: displayName || undefined, timezone };
+          ? { identifier: email, password }
+          : { email, password, displayName: displayName || undefined, phone: phone || undefined, timezone };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -74,24 +76,35 @@ export default function LoginForm() {
         {mode === "register" && (
           <div>
             <Label>Your name</Label>
-            <Input
-              placeholder="Romin Parekh"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-            />
+            <Input placeholder="Romin Parekh" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
           </div>
         )}
         <div>
-          <Label>Username</Label>
+          <Label>Email</Label>
           <Input
-            placeholder="rominparekh"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             autoCapitalize="none"
             autoCorrect="off"
             required
           />
         </div>
+        {mode === "register" && (
+          <div>
+            <Label>Phone (optional)</Label>
+            <Input
+              placeholder="+14155550123"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              inputMode="tel"
+            />
+            <p className="mt-1 text-xs text-neutral-400">
+              Add it now and anyone who already added you will appear in your Friends tab.
+            </p>
+          </div>
+        )}
         <div>
           <Label>Password</Label>
           <Input
@@ -110,6 +123,14 @@ export default function LoginForm() {
             : mode === "signin" ? "Sign in" : "Create account"}
         </Button>
       </form>
+
+      {mode === "signin" && (
+        <p className="mt-4 text-center text-sm">
+          <Link href="/forgot-password" className="text-brand-600 hover:underline">
+            Forgot password?
+          </Link>
+        </p>
+      )}
     </Card>
   );
 }

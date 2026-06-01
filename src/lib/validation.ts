@@ -1,24 +1,32 @@
 import { z } from "zod";
 import { RELATION_TYPES, SPECIAL_DAY_TYPES, CONTENT_KINDS } from "@/lib/constants";
 
-export const usernameSchema = z
+export const emailSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .min(3, "Username must be at least 3 characters")
-  .max(30)
-  .regex(/^[a-z0-9_.]+$/, "Use letters, numbers, underscore or dot only");
+  .email("Enter a valid email address")
+  .max(200);
 
 export const registerInput = z.object({
-  username: usernameSchema,
+  email: emailSchema,
   password: z.string().min(8, "Password must be at least 8 characters").max(200),
   displayName: z.string().trim().min(1).max(80).optional(),
+  phone: z.string().trim().max(40).optional(),
   timezone: z.string().trim().min(1).max(64).optional(),
 });
 
 export const loginInput = z.object({
-  username: usernameSchema,
+  // Accept email (preferred) or a legacy username.
+  identifier: z.string().trim().min(1).max(200),
   password: z.string().min(1).max(200),
+});
+
+export const forgotPasswordInput = z.object({ email: emailSchema });
+
+export const resetPasswordInput = z.object({
+  token: z.string().min(10).max(200),
+  password: z.string().min(8, "Password must be at least 8 characters").max(200),
 });
 
 export const specialDayInput = z

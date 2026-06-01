@@ -5,6 +5,7 @@ import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { normalizeToE164, hashPhone } from "@/lib/phone";
+import { establishConnections } from "@/lib/friends";
 
 const schema = z.object({
   displayName: z.string().trim().min(1).max(80).optional(),
@@ -53,11 +54,24 @@ export async function PATCH(req: Request) {
       .set(updates)
       .where(eq(users.id, user.id))
       .returning();
+
+    // If a phone was just added, link anyone who already added this person and
+    // create reciprocal pending connections.
+    let reciprocals = 0;
+    if (input.phone && updated.phoneHash) {
+      reciprocals = await establishConnections({
+        id: updated.id,
+        phoneHash: updated.phoneHash,
+        timezone: updated.timezone,
+      });
+    }
+
     return ok({
       displayName: updated.displayName,
       timezone: updated.timezone,
       discoverable: updated.discoverable,
       phoneE164: updated.phoneE164,
+      reciprocals,
     });
   });
 }

@@ -5,6 +5,7 @@ import { db } from "@/db/client";
 import { friends } from "@/db/schema";
 import { Badge, Card } from "@/components/ui";
 import AddFriendPanel from "@/components/friends/AddFriendPanel";
+import PendingConnections from "@/components/friends/PendingConnections";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,13 @@ export default async function FriendsPage() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const list = await db.query.friends.findMany({
+  const all = await db.query.friends.findMany({
     where: eq(friends.ownerUserId, user.id),
     orderBy: [desc(friends.createdAt)],
     with: { relationships: true, specialDays: true },
   });
+  const pending = all.filter((f) => f.status === "pending");
+  const list = all.filter((f) => f.status !== "pending");
 
   return (
     <div className="space-y-6">
@@ -26,6 +29,14 @@ export default async function FriendsPage() {
           <p className="text-neutral-500">{list.length} people</p>
         </div>
       </div>
+
+      <PendingConnections
+        pending={pending.map((f) => ({
+          id: f.id,
+          name: f.name,
+          relation: f.relationships[0]?.relationType ?? null,
+        }))}
+      />
 
       <AddFriendPanel />
 

@@ -3,7 +3,7 @@ import { ok, fail, handle } from "@/lib/api";
 import { db } from "@/db/client";
 import { contentDrafts, friends, notifications } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
-import { sendText, sendImage, sendVideo } from "@/lib/whatsapp/client";
+import { sendText, sendImage } from "@/lib/whatsapp/client";
 import { CONTENT_LIMITS } from "@/lib/constants";
 import { log } from "@/lib/log";
 
@@ -38,9 +38,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ draftI
     const text = draft.textBody ?? "";
     let messageId: string | null = null;
     try {
-      if (draft.kind === "video" && draft.mediaUrls[0]) {
-        messageId = await sendVideo(recipient, draft.mediaUrls[0], text);
-      } else if (draft.mediaUrls.length > 0) {
+      if (draft.mediaUrls.length > 0) {
         const urls = draft.mediaUrls.slice(0, CONTENT_LIMITS.PHOTO_MAX_COUNT);
         for (let i = 0; i < urls.length; i++) {
           const mid = await sendImage(recipient, urls[i], i === 0 ? text : undefined);

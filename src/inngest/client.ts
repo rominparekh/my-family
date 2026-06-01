@@ -10,7 +10,7 @@ type Events = {
       ownerUserId: string;
       friendId: string;
       scheduledFor: string; // ISO instant
-      kind: "text" | "photo" | "video";
+      kind: "text" | "photo" | "video" | "gif";
     };
   };
 };

@@ -6,7 +6,7 @@ import { log } from "@/lib/log";
 export interface RecordUsageInput {
   userId?: string | null;
   draftId?: string | null;
-  kind: "text" | "image" | "video";
+  kind: "text" | "image" | "video" | "gif";
   provider: string;
   model: string;
   inputTokens?: number;

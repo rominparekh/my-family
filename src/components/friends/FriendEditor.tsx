@@ -41,7 +41,7 @@ interface Friend {
 const KIND_LABEL: Record<string, string> = {
   text: "Message",
   photo: "Photo",
-  video: "Video",
+  gif: "Message + GIF",
 };
 
 const MONTHS = [

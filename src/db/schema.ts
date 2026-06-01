@@ -33,7 +33,7 @@ export const specialDayTypeEnum = pgEnum("special_day_type", [
   "custom",
 ]);
 
-export const contentKindEnum = pgEnum("content_kind", ["text", "photo", "video"]);
+export const contentKindEnum = pgEnum("content_kind", ["text", "photo", "video", "gif"]);
 
 export const draftStatusEnum = pgEnum("draft_status", [
   "draft",
@@ -58,7 +58,9 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // Username/password login (primary auth). Username stored lowercase.
+    // Email is the primary login identifier (stored lowercase). Username is kept
+    // for legacy accounts created before the email pivot.
+    email: text("email"),
     username: text("username"),
     passwordHash: text("password_hash"),
     // Phone is now optional (used only for WhatsApp delivery + friend discovery).
@@ -77,9 +79,29 @@ export const users = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
+    emailUnique: uniqueIndex("users_email_unique").on(t.email),
     usernameUnique: uniqueIndex("users_username_unique").on(t.username),
     phoneUnique: uniqueIndex("users_phone_unique").on(t.phoneE164),
     phoneHashIdx: index("users_phone_hash_idx").on(t.phoneHash),
+  })
+);
+
+// ── Password reset tokens ──
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tokenHashIdx: index("password_reset_token_hash_idx").on(t.tokenHash),
+    userIdx: index("password_reset_user_idx").on(t.userId),
   })
 );
 
@@ -129,6 +151,9 @@ export const friends = pgTable(
     phoneE164: text("phone_e164"),
     phoneHash: text("phone_hash"),
     timezone: text("timezone").notNull().default("UTC"),
+    // "active" or "pending" — pending = auto-created reciprocal connection
+    // awaiting the owner's approval (e.g. when someone added them).
+    status: text("status").notNull().default("active"),
     notes: text("notes"),
     avatarUrl: text("avatar_url"),
     // What kind of wish to generate for this friend's special days.
@@ -448,3 +473,4 @@ export type AiUsage = typeof aiUsage.$inferSelect;
 export type NewAiUsage = typeof aiUsage.$inferInsert;
 export type Invite = typeof invites.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

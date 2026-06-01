@@ -104,11 +104,12 @@ export default function ApprovalPanel({
         <div className="rounded-xl bg-neutral-50 p-4 text-lg leading-relaxed">
           {draft.textBody || "Generating…"}
         </div>
-        {draft.kind === "video" && draft.mediaUrls[0] ? (
-          <video
+        {draft.kind === "gif" && draft.mediaUrls[0] ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src={draft.mediaUrls[0]}
-            controls
-            className="w-full rounded-lg bg-black"
+            alt="GIF"
+            className="max-h-72 rounded-lg bg-neutral-100"
           />
         ) : (
           draft.mediaUrls.length > 0 && (

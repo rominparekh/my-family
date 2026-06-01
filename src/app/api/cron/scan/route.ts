@@ -70,7 +70,7 @@ export async function GET(req: Request) {
       ownerUserId: string;
       friendId: string;
       scheduledFor: string;
-      kind: "text" | "photo" | "video";
+      kind: "text" | "photo" | "video" | "gif";
     };
   }[] = [];
 
