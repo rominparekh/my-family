@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { CONTENT_LIMITS } from "@/lib/constants";
 import { bedrockEnabled, generateWithBedrock } from "@/lib/ai/bedrock";
+import { truncateGraphemes } from "@/lib/text-utils";
 
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 
@@ -79,7 +80,7 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
   if (bedrockEnabled()) {
     try {
       const r = await generateWithBedrock(buildPrompt(ctx), 300);
-      if (r.text) return { text: enforceLimit(r.text, ctx), model: r.model, usage: r.usage };
+      if (r.text) return { text: enforceLimit(r.text), model: r.model, usage: r.usage };
       return fallback();
     } catch (err) {
       logFail("bedrock", err);
@@ -114,7 +115,7 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
       cache_creation_input_tokens?: number | null;
     };
     return {
-      text: enforceLimit(text, ctx),
+      text: enforceLimit(text),
       model: MODEL,
       usage: {
         inputTokens: u.input_tokens ?? 0,
@@ -131,16 +132,19 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
   }
 }
 
-function enforceLimit(text: string, ctx: WishContext): string {
-  if (text.length <= CONTENT_LIMITS.TEXT_MAX_CHARS) return text;
-  // Trim to the last sentence/word boundary under the limit.
-  const truncated = text.slice(0, CONTENT_LIMITS.TEXT_MAX_CHARS);
+function enforceLimit(text: string): string {
+  // Grapheme-aware so we never split an emoji (which would render as "�").
+  const { text: truncated, truncated: wasTruncated } = truncateGraphemes(
+    text,
+    CONTENT_LIMITS.TEXT_MAX_CHARS
+  );
+  if (!wasTruncated) return text;
+  // Trim back to the last sentence/word boundary (these are ASCII, safe to slice).
   const lastStop = Math.max(
     truncated.lastIndexOf("."),
     truncated.lastIndexOf("!"),
     truncated.lastIndexOf(" ")
   );
   if (lastStop > 40) return truncated.slice(0, lastStop + 1).trim();
-  void ctx;
   return truncated.trim();
 }

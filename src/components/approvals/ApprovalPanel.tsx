@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Badge, Button, Card, Textarea } from "@/components/ui";
 import { buildWaShareLink, composeShareText } from "@/lib/whatsapp/share";
+import { graphemeLength } from "@/lib/text-utils";
 
 interface Draft {
   id: string;
@@ -122,7 +123,7 @@ export default function ApprovalPanel({
         )}
         <div className="flex items-center justify-between">
           {draft.textBody && (
-            <p className="text-xs text-neutral-400">{draft.textBody.length}/300 characters</p>
+            <p className="text-xs text-neutral-400">{graphemeLength(draft.textBody)}/300 characters</p>
           )}
           {draft.costUsd > 0 && (
             <p className="text-xs text-neutral-400">

@@ -3,12 +3,16 @@
 // so the wish is sent person-to-person (guaranteed delivery, no 24h window, no
 // template), the user just taps send. This is the officially-supported way to
 // have a message come "from the user" rather than the business number.
+import { stripLoneSurrogates } from "@/lib/text-utils";
+
 export function buildWaShareLink(
   phoneE164: string | null | undefined,
   text: string
 ): string {
   const digits = (phoneE164 ?? "").replace(/\D/g, "");
-  const encoded = encodeURIComponent(text);
+  // Strip any unpaired surrogates so encodeURIComponent can't throw and the
+  // emoji always survive the round-trip into WhatsApp.
+  const encoded = encodeURIComponent(stripLoneSurrogates(text));
   // With a number → opens the chat with that friend; without → WhatsApp lets the
   // user pick the recipient.
   return digits ? `https://wa.me/${digits}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
