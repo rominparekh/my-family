@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { ok, fail, handle } from "@/lib/api";
-import { db } from "@/db/client";
+import { db, atomic } from "@/db/client";
 import { relationships } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { relationshipInput } from "@/lib/validation";
@@ -8,7 +8,8 @@ import { getOwnedFriend } from "@/lib/friends";
 
 type Params = { params: Promise<{ id: string }> };
 
-// POST /api/friends/:id/relationships — set/add a relationship type.
+// POST /api/friends/:id/relationships — SET the friend's single relationship,
+// replacing any existing one (a friend has exactly one relationship to you).
 export async function POST(req: Request, { params }: Params) {
   return handle(async () => {
     const user = await requireUser();
@@ -18,20 +19,17 @@ export async function POST(req: Request, { params }: Params) {
 
     const { relationType } = relationshipInput.parse(await req.json());
 
-    // Idempotent on (friend, relationType) thanks to the unique index.
-    const existing = await db.query.relationships.findFirst({
-      where: and(
-        eq(relationships.friendId, friend.id),
-        eq(relationships.relationType, relationType)
-      ),
-    });
-    if (existing) return ok(existing);
+    // Replace atomically: clear existing, insert the new single relationship.
+    await atomic([
+      db.delete(relationships).where(eq(relationships.friendId, friend.id)),
+      db.insert(relationships).values({
+        ownerUserId: user.id,
+        friendId: friend.id,
+        relationType,
+      }),
+    ]);
 
-    const [rel] = await db
-      .insert(relationships)
-      .values({ ownerUserId: user.id, friendId: friend.id, relationType })
-      .returning();
-    return ok(rel, { status: 201 });
+    return ok({ friendId: friend.id, relationType });
   });
 }
 

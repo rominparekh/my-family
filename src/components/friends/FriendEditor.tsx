@@ -87,6 +87,7 @@ export default function FriendEditor({ friend }: { friend: Friend }) {
       <RelationshipsCard friend={friend} call={call} busy={busy} />
       <SpecialDaysCard friend={friend} call={call} busy={busy} />
       <PhotosCard friend={friend} router={router} />
+      <GenerateTestCard friend={friend} router={router} />
       {!friend.linkedUserId && <InviteCard friend={friend} />}
 
       <Card className="border-red-200">
@@ -193,54 +194,42 @@ function RelationshipsCard({
   call: CallFn;
   busy: boolean;
 }) {
-  const [relationType, setRelationType] = useState("");
+  const current = friend.relationships[0];
+
+  async function setRelationship(value: string) {
+    if (!value) {
+      // Clear the relationship.
+      if (current) {
+        await call(`/api/friends/${friend.id}/relationships?relId=${current.id}`, {
+          method: "DELETE",
+        });
+      }
+      return;
+    }
+    await call(`/api/friends/${friend.id}/relationships`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ relationType: value }),
+    });
+  }
 
   return (
     <Card className="space-y-3">
-      <h2 className="font-semibold">Relationships</h2>
-      <div className="flex flex-wrap gap-2">
-        {friend.relationships.length === 0 && (
-          <p className="text-sm text-neutral-400">None yet.</p>
-        )}
-        {friend.relationships.map((r) => (
-          <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1 text-sm text-brand-700">
-            {r.relationType}
-            <button
-              className="text-brand-400 hover:text-brand-700"
-              disabled={busy}
-              onClick={() =>
-                call(`/api/friends/${friend.id}/relationships?relId=${r.id}`, { method: "DELETE" })
-              }
-            >
-              ×
-            </button>
-          </span>
+      <h2 className="font-semibold">Relationship</h2>
+      <p className="text-sm text-neutral-500">How is this person related to you?</p>
+      <Select
+        className="max-w-xs"
+        value={current?.relationType ?? ""}
+        disabled={busy}
+        onChange={(e) => setRelationship(e.target.value)}
+      >
+        <option value="">No relationship set</option>
+        {RELATION_TYPES.map((r) => (
+          <option key={r} value={r}>
+            {r}
+          </option>
         ))}
-      </div>
-      <div className="flex gap-2">
-        <Select value={relationType} onChange={(e) => setRelationType(e.target.value)} className="max-w-xs">
-          <option value="">Add relationship…</option>
-          {RELATION_TYPES.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </Select>
-        <Button
-          variant="ghost"
-          disabled={busy || !relationType}
-          onClick={async () => {
-            await call(`/api/friends/${friend.id}/relationships`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ relationType }),
-            });
-            setRelationType("");
-          }}
-        >
-          Add
-        </Button>
-      </div>
+      </Select>
     </Card>
   );
 }
@@ -325,6 +314,52 @@ function SpecialDaysCard({
       >
         Add special day
       </Button>
+    </Card>
+  );
+}
+
+function GenerateTestCard({
+  friend,
+  router,
+}: {
+  friend: Friend;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const hasDays = friend.specialDays.length > 0;
+
+  async function generate() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/friends/${friend.id}/generate-now`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) throw new Error(json.error || "Failed");
+      setMsg("Generated! Open Approvals to review it.");
+      router.refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-3 border-brand-200">
+      <h2 className="font-semibold">Generate a wish now (test)</h2>
+      <p className="text-sm text-neutral-600">
+        Generate a wish for {friend.name}&apos;s nearest special day immediately and send it
+        to your <Link href="/approvals" className="text-brand-600 hover:underline">Approvals</Link>{" "}
+        inbox to review — no waiting for the scheduler.
+      </p>
+      <div className="flex items-center gap-2">
+        <Button onClick={generate} disabled={busy || !hasDays}>
+          {busy ? "Generating…" : "Generate now"}
+        </Button>
+        {!hasDays && <span className="text-xs text-neutral-400">Add a special day first.</span>}
+      </div>
+      {msg && <p className="text-sm text-neutral-600">{msg}</p>}
     </Card>
   );
 }

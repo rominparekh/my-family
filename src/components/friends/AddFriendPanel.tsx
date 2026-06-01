@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, Label, Select } from "@/components/ui";
-import { RELATION_TYPES } from "@/lib/constants";
+import { RELATION_TYPES, SPECIAL_DAY_TYPES } from "@/lib/constants";
 
 export default function AddFriendPanel() {
   const router = useRouter();
@@ -14,6 +14,8 @@ export default function AddFriendPanel() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [relationType, setRelationType] = useState("");
+  const [dayType, setDayType] = useState<(typeof SPECIAL_DAY_TYPES)[number]>("birthday");
+  const [dayLabel, setDayLabel] = useState("");
   const [bMonth, setBMonth] = useState("");
   const [bDay, setBDay] = useState("");
   const [bYear, setBYear] = useState("");
@@ -32,7 +34,8 @@ export default function AddFriendPanel() {
         bMonth && bDay
           ? [
               {
-                type: "birthday" as const,
+                type: dayType,
+                label: dayType === "custom" ? dayLabel : undefined,
                 month: Number(bMonth),
                 day: Number(bDay),
                 year: bYear ? Number(bYear) : undefined,
@@ -58,6 +61,8 @@ export default function AddFriendPanel() {
       setName("");
       setPhone("");
       setRelationType("");
+      setDayType("birthday");
+      setDayLabel("");
       setBMonth("");
       setBDay("");
       setBYear("");
@@ -148,7 +153,27 @@ export default function AddFriendPanel() {
               </Select>
             </div>
             <div>
-              <Label>Birthday (optional)</Label>
+              <Label>Special day (optional)</Label>
+              <Select value={dayType} onChange={(e) => setDayType(e.target.value as typeof dayType)}>
+                {SPECIAL_DAY_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {dayType === "custom" && (
+              <div>
+                <Label>Label for this day</Label>
+                <Input
+                  placeholder="e.g. Graduation"
+                  value={dayLabel}
+                  onChange={(e) => setDayLabel(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="sm:col-span-2">
+              <Label>Date (leave blank to skip)</Label>
               <div className="flex gap-2">
                 <Input
                   placeholder="MM"
@@ -163,7 +188,7 @@ export default function AddFriendPanel() {
                   onChange={(e) => setBDay(e.target.value)}
                 />
                 <Input
-                  placeholder="YYYY"
+                  placeholder="YYYY (opt)"
                   inputMode="numeric"
                   value={bYear}
                   onChange={(e) => setBYear(e.target.value)}

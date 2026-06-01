@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/db/client";
 import { contentDrafts } from "@/db/schema";
 import AppNav from "@/components/AppNav";
+import PhonePrompt from "@/components/PhonePrompt";
 
 export default async function AppLayout({
   children,
@@ -30,6 +31,7 @@ export default async function AppLayout({
         pendingCount={Number(pendingCount)}
       />
       <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      <PhonePrompt hasPhone={Boolean(user.phoneE164)} />
     </div>
   );
 }

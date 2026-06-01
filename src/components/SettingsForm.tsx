@@ -19,6 +19,7 @@ export default function SettingsForm({
   const [displayName, setDisplayName] = useState(initial.displayName);
   const [timezone, setTimezone] = useState(initial.timezone);
   const [discoverable, setDiscoverable] = useState(initial.discoverable);
+  const [phone, setPhone] = useState(initial.phoneE164);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -29,7 +30,7 @@ export default function SettingsForm({
       const res = await fetch("/api/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName, timezone, discoverable }),
+        body: JSON.stringify({ displayName, timezone, discoverable, phone: phone || null }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json.ok === false) throw new Error(json.error || "Failed");
@@ -51,6 +52,18 @@ export default function SettingsForm({
       <div>
         <Label>Display name</Label>
         <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+      </div>
+      <div>
+        <Label>Your WhatsApp phone number</Label>
+        <Input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="+14155550123"
+          inputMode="tel"
+        />
+        <p className="mt-1 text-xs text-neutral-400">
+          Required to send wishes and receive drafts for approval. Include your country code.
+        </p>
       </div>
       <div>
         <Label>Your timezone (IANA)</Label>

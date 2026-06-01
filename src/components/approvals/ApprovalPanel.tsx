@@ -38,6 +38,23 @@ export default function ApprovalPanel({
   const [err, setErr] = useState<string | null>(null);
 
   const locked = FINAL.includes(draft.status);
+  const [sendMsg, setSendMsg] = useState<string | null>(null);
+
+  async function sendNow() {
+    setBusy(true);
+    setSendMsg(null);
+    try {
+      const res = await fetch(`/api/approvals/${draft.id}/send-now`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) throw new Error(json.error || "Failed");
+      setSendMsg(`Sent to ${json.data?.to ?? "recipient"}.`);
+      router.refresh();
+    } catch (e) {
+      setSendMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function respond(decision: "approved" | "changes") {
     setBusy(true);
@@ -143,6 +160,21 @@ export default function ApprovalPanel({
           {draft.status === "sent"
             ? "This wish has been delivered. 🎉"
             : "Approved — we'll deliver it on the day, in your friend's timezone."}
+        </Card>
+      )}
+
+      {draft.status !== "sent" && (
+        <Card className="space-y-2 border-brand-200">
+          <h2 className="text-sm font-semibold">Send now (test)</h2>
+          <p className="text-sm text-neutral-600">
+            Deliver this over WhatsApp immediately, skipping the scheduled send. Plain
+            wishes only deliver if the recipient has messaged your business number in the
+            last 24h (no template needed).
+          </p>
+          <Button variant="ghost" onClick={sendNow} disabled={busy}>
+            {busy ? "Sending…" : "Send now"}
+          </Button>
+          {sendMsg && <p className="text-sm text-neutral-600">{sendMsg}</p>}
         </Card>
       )}
 
