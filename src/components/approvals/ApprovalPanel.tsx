@@ -164,6 +164,17 @@ export default function ApprovalPanel({
             {draft.friendPhone ? ` (${draft.friendPhone})` : ""}. It comes straight from you, so
             it always delivers — no 24-hour window, no templates.
           </p>
+          <div>
+            <p className="mb-1 text-xs font-medium text-neutral-500">Exactly what gets sent:</p>
+            <pre className="whitespace-pre-wrap break-words rounded-lg border border-neutral-200 bg-white p-3 text-sm text-neutral-800">
+{shareText}
+            </pre>
+            {draft.kind === "gif" && (
+              <p className="mt-1 text-xs text-neutral-400">
+                The Giphy link previews as an animated GIF in WhatsApp.
+              </p>
+            )}
+          </div>
           <a href={waLink} target="_blank" rel="noopener noreferrer">
             <Button>Open WhatsApp to send</Button>
           </a>

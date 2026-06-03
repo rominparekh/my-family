@@ -19,12 +19,23 @@ export function buildWaShareLink(
 }
 
 /**
+ * A direct Giphy file URL (media*.giphy.com/.../giphy.gif) is long and WhatsApp
+ * only shows a weak link card for it. The Giphy *page* URL (giphy.com/gifs/<id>)
+ * is short and renders as an animated preview, so convert when we recognise one.
+ */
+export function toShareableMediaUrl(url: string): string {
+  const m = url.match(/\/([A-Za-z0-9]{6,})\/giphy\.\w+(?:[?#]|$)/);
+  if (m && /giphy\.com/.test(url)) return `https://giphy.com/gifs/${m[1]}`;
+  return url;
+}
+
+/**
  * Compose the shareable text for a draft. wa.me carries text only, so for
- * photo/video wishes we append the (public) media links — the friend can tap to
- * view them.
+ * photo/GIF wishes we append the (public) media links — the friend taps to view
+ * them (GIF links render as an animated WhatsApp preview).
  */
 export function composeShareText(textBody: string | null, mediaUrls: string[]): string {
   const parts = [textBody?.trim() || ""];
-  if (mediaUrls.length > 0) parts.push(mediaUrls.join("\n"));
+  if (mediaUrls.length > 0) parts.push(mediaUrls.map(toShareableMediaUrl).join("\n"));
   return parts.filter(Boolean).join("\n\n");
 }
