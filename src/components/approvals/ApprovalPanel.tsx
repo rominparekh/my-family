@@ -121,12 +121,17 @@ export default function ApprovalPanel({
           {draft.textBody || "Generating…"}
         </div>
         {draft.kind === "gif" && draft.mediaUrls[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={draft.mediaUrls[0]}
-            alt="GIF"
-            className="max-h-72 rounded-lg bg-neutral-100"
-          />
+          <div className="space-y-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={draft.mediaUrls[0]}
+              alt="GIF"
+              className="max-h-72 rounded-lg bg-neutral-100"
+            />
+            <p className="text-xs text-neutral-400">
+              This GIF is attached as a link — it sends with your message.
+            </p>
+          </div>
         ) : (
           draft.mediaUrls.length > 0 && (
             <div className="grid grid-cols-3 gap-2">

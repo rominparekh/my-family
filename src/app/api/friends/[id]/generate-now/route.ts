@@ -59,6 +59,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     });
     if (!draft) return fail("Could not create draft", 500);
 
+    // The draft may have been created earlier (onConflictDoNothing) with a
+    // different kind — re-sync it to the friend's current preference so e.g.
+    // switching to "Message + GIF" and regenerating actually produces a GIF.
+    if (draft.kind !== friend.preferredContentKind) {
+      await db
+        .update(contentDrafts)
+        .set({ kind: friend.preferredContentKind })
+        .where(eq(contentDrafts.id, draft.id));
+    }
+
     // Generate synchronously and persist as pending_approval.
     const content = await generateForDraft(draft.id);
     await db
