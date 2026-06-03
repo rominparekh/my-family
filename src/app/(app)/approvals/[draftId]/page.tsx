@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/db/client";
-import { contentDrafts, draftMessages } from "@/db/schema";
+import { contentDrafts, draftMessages, specialDays } from "@/db/schema";
 import { prettyDate } from "@/lib/timezone";
 import { draftCostUsd } from "@/lib/ai/usage";
 import ApprovalPanel from "@/components/approvals/ApprovalPanel";
@@ -35,6 +35,17 @@ export default async function ApprovalDetailPage({
 
   const costUsd = await draftCostUsd(draft.id);
 
+  // Default GIF search term = the occasion (so "Change GIF" opens with relevant results).
+  const day = await db.query.specialDays.findFirst({
+    where: eq(specialDays.id, draft.specialDayId),
+  });
+  const gifQuery =
+    day?.type === "anniversary"
+      ? "happy anniversary"
+      : day?.type === "custom"
+        ? day.label || "celebration"
+        : "happy birthday";
+
   return (
     <ApprovalPanel
       draft={{
@@ -47,6 +58,7 @@ export default async function ApprovalDetailPage({
         friendPhone: draft.friend?.phoneE164 ?? null,
         occasionWhen,
         costUsd,
+        gifQuery,
       }}
       messages={messages.map((m) => ({
         id: m.id,

@@ -7,6 +7,7 @@ import Image from "next/image";
 import { Badge, Button, Card, Textarea } from "@/components/ui";
 import { buildWaShareLink, composeShareText } from "@/lib/whatsapp/share";
 import { graphemeLength } from "@/lib/text-utils";
+import GifPicker from "@/components/approvals/GifPicker";
 
 interface Draft {
   id: string;
@@ -18,6 +19,7 @@ interface Draft {
   friendPhone: string | null;
   occasionWhen: string;
   costUsd: number;
+  gifQuery?: string;
 }
 interface Message {
   id: string;
@@ -131,6 +133,7 @@ export default function ApprovalPanel({
             <p className="text-xs text-neutral-400">
               This GIF is attached as a link — it sends with your message.
             </p>
+            {!locked && <GifPicker draftId={draft.id} defaultQuery={draft.gifQuery ?? ""} />}
           </div>
         ) : (
           draft.mediaUrls.length > 0 && (

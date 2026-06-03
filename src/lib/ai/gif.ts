@@ -11,29 +11,38 @@ export function gifProviderName(): string {
   return gifEnabled() ? "giphy" : "none";
 }
 
-/** Find a single relevant GIF for the query; returns a direct GIF URL or null. */
-export async function findGif(query: string): Promise<string | null> {
+type GiphyResult = {
+  images?: { original?: { url?: string }; downsized_medium?: { url?: string } };
+};
+
+/** Search Giphy; returns up to `limit` direct GIF URLs (best match first). */
+export async function findGifs(query: string, limit = 12): Promise<string[]> {
   const key = process.env.GIPHY_API_KEY;
   if (!key) {
     log.warn("gif.skip_no_key", { query });
-    return null;
+    return [];
   }
   try {
     const url =
       `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(key)}` +
-      `&q=${encodeURIComponent(query)}&limit=1&rating=g&bundle=messaging_non_clips`;
+      `&q=${encodeURIComponent(query)}&limit=${limit}&rating=g&bundle=messaging_non_clips`;
     const res = await fetch(url);
     if (!res.ok) {
       log.error("gif.search_failed", { status: res.status });
-      return null;
+      return [];
     }
-    const json = (await res.json()) as {
-      data?: { images?: { original?: { url?: string }; downsized_medium?: { url?: string } } }[];
-    };
-    const img = json.data?.[0]?.images;
-    return img?.downsized_medium?.url ?? img?.original?.url ?? null;
+    const json = (await res.json()) as { data?: GiphyResult[] };
+    return (json.data ?? [])
+      .map((g) => g.images?.downsized_medium?.url ?? g.images?.original?.url)
+      .filter((u): u is string => Boolean(u));
   } catch (err) {
     log.error("gif.error", { err: String(err) });
-    return null;
+    return [];
   }
+}
+
+/** Find a single relevant GIF for the query; returns a direct GIF URL or null. */
+export async function findGif(query: string): Promise<string | null> {
+  const [first] = await findGifs(query, 1);
+  return first ?? null;
 }
