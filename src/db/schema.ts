@@ -43,6 +43,7 @@ export const draftStatusEnum = pgEnum("draft_status", [
   "scheduled",
   "sent",
   "failed",
+  "rejected",
 ]);
 
 export const messageRoleEnum = pgEnum("message_role", [

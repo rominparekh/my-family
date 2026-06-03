@@ -26,7 +26,7 @@ interface Message {
   createdAt: string;
 }
 
-const FINAL = ["approved", "scheduled", "sent"];
+const FINAL = ["approved", "scheduled", "sent", "rejected"];
 
 export default function ApprovalPanel({
   draft,
@@ -77,6 +77,22 @@ export default function ApprovalPanel({
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reject() {
+    if (!confirm("Reject this wish? It won't be sent or regenerated.")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/approvals/${draft.id}/reject`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) throw new Error(json.error || "Failed");
+      router.push("/approvals");
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
       setBusy(false);
     }
   }
@@ -134,7 +150,7 @@ export default function ApprovalPanel({
         </div>
       </Card>
 
-      {draft.textBody && (
+      {draft.textBody && draft.status !== "rejected" && (
         <Card className="space-y-2 border-green-300 bg-green-50/40">
           <h2 className="font-semibold">Send via WhatsApp — from you 💬</h2>
           <p className="text-sm text-neutral-600">
@@ -156,14 +172,22 @@ export default function ApprovalPanel({
       )}
 
       {!locked && (
-        <Card className="space-y-3">
-          <div className="flex gap-2">
+        <Card className="space-y-4">
+          <h2 className="font-semibold">Your decision</h2>
+
+          {/* Primary actions: a clear, evenly-spaced row. */}
+          <div className="grid grid-cols-2 gap-3">
             <Button onClick={() => respond("approved")} disabled={busy}>
               👍 Approve
             </Button>
+            <Button variant="danger" onClick={reject} disabled={busy}>
+              🗑 Reject
+            </Button>
           </div>
-          <div>
-            <p className="mb-1 text-sm font-medium text-neutral-700">Or ask for changes</p>
+
+          {/* Secondary action: ask for changes. */}
+          <div className="border-t border-neutral-200 pt-3">
+            <p className="mb-1 text-sm font-medium text-neutral-700">Not quite right? Ask for changes</p>
             <Textarea
               rows={2}
               placeholder="e.g. make it funnier, mention their new puppy…"
@@ -171,12 +195,12 @@ export default function ApprovalPanel({
               onChange={(e) => setFeedback(e.target.value)}
             />
             <Button
-              variant="ghost"
+              variant="secondary"
               className="mt-2"
               disabled={busy || feedback.trim().length === 0}
               onClick={() => respond("changes")}
             >
-              Request changes
+              ✏️ Request changes
             </Button>
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
@@ -187,11 +211,13 @@ export default function ApprovalPanel({
         <Card className="text-sm text-neutral-600">
           {draft.status === "sent"
             ? "This wish has been delivered. 🎉"
-            : "Approved — we'll deliver it on the day, in your friend's timezone."}
+            : draft.status === "rejected"
+              ? "You rejected this wish — it won't be sent."
+              : "Approved! Use “Send via WhatsApp” above to send it (or send it on the day)."}
         </Card>
       )}
 
-      {draft.status !== "sent" && (
+      {draft.status !== "sent" && draft.status !== "rejected" && (
         <Card className="space-y-2 border-brand-200">
           <h2 className="text-sm font-semibold">Send now (test)</h2>
           <p className="text-sm text-neutral-600">

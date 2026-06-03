@@ -39,6 +39,7 @@ export const DRAFT_STATUSES = [
   "scheduled",
   "sent",
   "failed",
+  "rejected",
 ] as const;
 export type DraftStatus = (typeof DRAFT_STATUSES)[number];
 
