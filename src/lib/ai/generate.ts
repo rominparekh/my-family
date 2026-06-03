@@ -110,8 +110,10 @@ export async function generateForDraft(
     });
   } else if (kind === "gif") {
     // A relevant GIF, sourced from Giphy and included as a link (wa.me is
-    // text-only, so WhatsApp renders the link as an animated preview).
-    const query = `${occasion}${ctx.relationType ? " " + ctx.relationType : ""}`.trim();
+    // text-only, so WhatsApp renders the link as an animated preview). The search
+    // phrase comes from the same LLM call that wrote the message, so it reflects
+    // the occasion + the message's actual content (not a generic guess).
+    const query = textResult.gifQuery || `happy ${occasion}`;
     const gifUrl = await findGif(query);
     if (gifUrl) mediaUrls = [gifUrl];
 

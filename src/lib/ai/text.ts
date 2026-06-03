@@ -41,12 +41,36 @@ function buildPrompt(ctx: WishContext): string {
     lines.push(`Revise it per this feedback: "${ctx.feedback}"`);
   }
   lines.push("");
-  lines.push("Output ONLY the message text, nothing else.");
+  lines.push("Also pick a short GIF search phrase to accompany the message:");
+  lines.push(
+    `- 2-4 words for finding a GIF on Giphy that fits the OCCASION and the message's mood/details.`
+  );
+  lines.push(
+    `- Lead with the occasion (e.g. "happy ${ctx.occasion}"), then add a theme drawn ONLY from the message/notes (e.g. flowers, hug, hiking).`
+  );
+  lines.push(`- Keep it broad enough to return results; do NOT invent topics not in the context.`);
+  lines.push("");
+  lines.push('Output ONLY a JSON object: {"message": "<the message>", "gif_query": "<phrase>"}');
   return lines.join("\n");
+}
+
+function parseGeneration(raw: string): { message: string; gifQuery?: string } {
+  // Strip code fences the model might add, then try to parse the JSON object.
+  const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  try {
+    const obj = JSON.parse(cleaned) as { message?: string; gif_query?: string };
+    if (obj && typeof obj.message === "string") {
+      return { message: obj.message, gifQuery: obj.gif_query?.trim() || undefined };
+    }
+  } catch {
+    /* not JSON — fall back to treating the whole output as the message */
+  }
+  return { message: raw.trim().replace(/^["']|["']$/g, "") };
 }
 
 export interface WishTextResult {
   text: string;
+  gifQuery?: string;
   model: string;
   usage: {
     inputTokens: number;
@@ -63,7 +87,12 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
 
   const fallback = (): WishTextResult => {
     const base = `Happy ${ctx.occasion}, ${ctx.friendName}! Wishing you a wonderful day. — ${ctx.senderName}`;
-    return { text: base.slice(0, CONTENT_LIMITS.TEXT_MAX_CHARS), model: "fallback", usage: zeroUsage };
+    return {
+      text: base.slice(0, CONTENT_LIMITS.TEXT_MAX_CHARS),
+      gifQuery: `happy ${ctx.occasion}`,
+      model: "fallback",
+      usage: zeroUsage,
+    };
   };
 
   const logFail = (where: string, err: unknown) =>
@@ -79,9 +108,15 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
   // Prefer Amazon Bedrock when a Bedrock API key is present.
   if (bedrockEnabled()) {
     try {
-      const r = await generateWithBedrock(buildPrompt(ctx), 300);
-      if (r.text) return { text: enforceLimit(r.text), model: r.model, usage: r.usage };
-      return fallback();
+      const r = await generateWithBedrock(buildPrompt(ctx), 400);
+      if (!r.text) return fallback();
+      const parsed = parseGeneration(r.text);
+      return {
+        text: enforceLimit(parsed.message),
+        gifQuery: parsed.gifQuery,
+        model: r.model,
+        usage: r.usage,
+      };
     } catch (err) {
       logFail("bedrock", err);
       return fallback();
@@ -94,7 +129,7 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
   try {
     const msg = await client().messages.create({
       model: MODEL,
-      max_tokens: 300,
+      max_tokens: 400,
       messages: [{ role: "user", content: buildPrompt(ctx) }],
     });
 
@@ -102,10 +137,10 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("")
-      .trim()
-      .replace(/^["']|["']$/g, "");
+      .trim();
 
     if (!text) return fallback();
+    const parsed = parseGeneration(text);
 
     // Cache token fields exist at runtime; read them defensively across SDK versions.
     const u = msg.usage as {
@@ -115,7 +150,8 @@ export async function generateWishText(ctx: WishContext): Promise<WishTextResult
       cache_creation_input_tokens?: number | null;
     };
     return {
-      text: enforceLimit(text),
+      text: enforceLimit(parsed.message),
+      gifQuery: parsed.gifQuery,
       model: MODEL,
       usage: {
         inputTokens: u.input_tokens ?? 0,
